@@ -14,7 +14,7 @@ import {
   useValues,
 } from "../hooks/queries.ts";
 import { buildBoard, type BoardRow, type Ownership } from "../lib/board.ts";
-import { DEFAULT_WEIGHTS, MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
+import { MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
 import { STARTER_RANK } from "../lib/production.ts";
 import { valuesParamsFor } from "../lib/scoring.ts";
 
@@ -104,9 +104,13 @@ export default function Board() {
             <th className="py-2 pr-3">#</th>
             <th className="pr-3">Player</th>
             <th className="pr-3">Score</th>
+            <th className="pr-3" title="Average share of the team's targets, carries and air yards, weighted by position">
+              Opp. share
+            </th>
+            <th className="pr-3">Age</th>
+            <th className="pr-3">Draft</th>
             <th className="pr-3">Value</th>
-            <th className="pr-3">Owner</th>
-            <th>Why</th>
+            <th>Owner</th>
           </tr>
         </thead>
         <tbody>
@@ -122,11 +126,9 @@ export default function Board() {
 const selectClass = "rounded border border-slate-700 bg-slate-900 px-2 py-1";
 
 function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
-  const { player, value, score, signals, ownership } = row;
-  // Only signals the model actually weighs; the others scored near chance in the backtest.
-  const reasons = signals.filter((s) => DEFAULT_WEIGHTS[s.key] > 0 && s.reason).map((s) => s.reason);
+  const { player, usage, draft, value, score, ownership } = row;
   return (
-    <tr className="border-b border-slate-900 align-top">
+    <tr className="border-b border-slate-900 align-middle">
       <td className="py-2 pr-3 text-slate-500">{rank}</td>
       <td className="pr-3">
         <div className="flex items-center gap-3">
@@ -134,22 +136,46 @@ function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
           <div>
             <div className="font-medium">{player.name}</div>
             <div className="text-xs text-slate-400">
-              {player.position} · {player.team} · {player.age ?? "?"} yrs
+              {player.position} · {player.team}
               {player.injuryStatus && <span className="ml-1 text-amber-400">{player.injuryStatus}</span>}
             </div>
           </div>
         </div>
       </td>
       <td className="pr-3 font-semibold text-emerald-400">{score}</td>
-      <td className="pr-3 text-slate-300">{value ? `${player.position}${value.positionRank}` : "—"}</td>
       <td className="pr-3">
-        <OwnershipBadge ownership={ownership} />
+        {usage ? (
+          <>
+            <div>{Math.round(usage.opportunityShare * 100)}%</div>
+            <div className="text-xs text-slate-500">{usage.games} games</div>
+          </>
+        ) : (
+          <Empty />
+        )}
       </td>
-      <td className="text-xs text-slate-300">
-        {reasons.length ? reasons.map((r) => <div key={r}>{r}</div>) : <span className="text-slate-500">—</span>}
+      <td className="pr-3">{player.age ?? <Empty />}</td>
+      <td className="pr-3">
+        {draft ? (
+          <>
+            <div>
+              Rd {draft.round}, #{draft.pick}
+            </div>
+            <div className="text-xs text-slate-500">{draft.season}</div>
+          </>
+        ) : (
+          <Empty />
+        )}
+      </td>
+      <td className="pr-3 text-slate-300">{value ? `${player.position}${value.positionRank}` : <Empty />}</td>
+      <td>
+        <OwnershipBadge ownership={ownership} />
       </td>
     </tr>
   );
+}
+
+function Empty() {
+  return <span className="text-slate-500">—</span>;
 }
 
 function OwnershipBadge({ ownership }: { ownership: Ownership }) {

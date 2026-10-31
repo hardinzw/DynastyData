@@ -69,6 +69,8 @@ export interface Signal {
 
 export interface BreakoutResult {
   player: PlayerInfo;
+  usage: UsageAverages | null;
+  draft: DraftInfo | null;
   /** 0-100. */
   score: number;
   signals: Signal[];
@@ -158,6 +160,8 @@ export function rankBreakouts(inputs: BreakoutInput[], weights: Weights = DEFAUL
   return inputs
     .map((input, i) => ({
       player: input.player,
+      usage: input.usage,
+      draft: input.draft,
       score: Math.round(combine(signals[i]!, weights)),
       signals: signals[i]!,
     }))
