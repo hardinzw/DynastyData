@@ -6,3 +6,7 @@ dist
 !.dev.vars.example
 *.log
 .DS_Store
+
+# Working docs, kept local
+docs/architecture-overview.md
+docs/model-executive-summary.md
