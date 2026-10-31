@@ -102,14 +102,12 @@ export interface UsageAverages {
   opportunityShare: number;
 }
 
-export interface UsageSummary {
-  /** The last `recentGames` games. */
-  recent: UsageAverages;
-  /** Every game before the recent window. Null if there aren't any. */
-  earlier: UsageAverages | null;
-}
-
-function average(games: UsageWeek[]): UsageAverages {
+/**
+ * A player's average usage over every game he played. The backtest found the whole
+ * window predicts breakouts better than recent games or any measure of rising usage.
+ */
+export function summarizeUsage(games: UsageWeek[]): UsageAverages | null {
+  if (games.length === 0) return null;
   const mean = (f: (u: UsageWeek) => number) => games.reduce((sum, g) => sum + f(g), 0) / games.length;
   return {
     games: games.length,
@@ -119,12 +117,4 @@ function average(games: UsageWeek[]): UsageAverages {
     redZoneShare: mean((g) => g.redZoneShare),
     opportunityShare: mean((g) => g.opportunityShare),
   };
-}
-
-/** Compares a player's most recent games with the rest of his sample. */
-export function summarizeUsage(games: UsageWeek[], recentGames = 3): UsageSummary | null {
-  if (games.length === 0) return null;
-  const recent = games.slice(-recentGames);
-  const earlier = games.slice(0, -recentGames);
-  return { recent: average(recent), earlier: earlier.length ? average(earlier) : null };
 }

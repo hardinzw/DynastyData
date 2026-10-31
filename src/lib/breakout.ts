@@ -1,18 +1,19 @@
 import type { Position } from "../../shared/positions.ts";
 import type { DraftInfo, PlayerInfo } from "../../shared/types.ts";
-import type { UsageSummary } from "./usage.ts";
+import type { UsageAverages } from "./usage.ts";
 
-export type SignalKey = "usageTrend" | "usageLevel" | "youth" | "draftCapital" | "marketLag";
+export type SignalKey = "usageLevel" | "youth" | "draftCapital" | "marketLag";
 
 export type Weights = Record<SignalKey, number>;
 
 /**
- * Backtested weights (npm run backtest). A compromise between the best in-season weights
- * (usage 0.4, youth 0.2, draft 0.4) and the best next-season weights (usage 0.7, draft 0.3).
- * Usage trend and market lag scored near chance on their own, so they're off until redesigned.
+ * Backtested weights (npm run backtest). They sit between the best in-season weights
+ * (usage 0.5, youth 0.1, draft 0.4) and the best next-season weights (usage 0.7, youth 0.1,
+ * draft 0.2). Market lag scored near chance on its own, so it's off. There is no rising-usage signal: none of the designs tried (recent vs earlier games,
+ * snap-share jumps, slopes, vacated teammate usage) predicted breakouts better than chance,
+ * and season-long usage beat recent usage.
  */
 export const DEFAULT_WEIGHTS: Weights = {
-  usageTrend: 0,
   usageLevel: 0.6,
   youth: 0.1,
   draftCapital: 0.3,
@@ -46,13 +47,10 @@ const DRAFT_ROUND_SCORE = [1, 0.75, 0.5, 0.3]; // rounds 1-4; later rounds get L
 const LATE_ROUND_SCORE = 0.15;
 const UNKNOWN_DRAFT_SCORE = 0.1;
 
-// Gains that score a full 1.0 on the trend signal.
-const FULL_OPPORTUNITY_GAIN = 0.1;
-const FULL_SNAP_GAIN = 0.25;
-
 export interface BreakoutInput {
   player: PlayerInfo;
-  usage: UsageSummary | null;
+  /** Average usage over the games played so far. */
+  usage: UsageAverages | null;
   draft: DraftInfo | null;
   /**
    * What the market charges for the player; higher is more expensive. Only its rank within
@@ -79,25 +77,13 @@ export interface BreakoutResult {
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-function usageTrend({ usage }: BreakoutInput): Signal {
-  if (!usage?.earlier) return { key: "usageTrend", score: 0, reason: null };
-  const { recent, earlier } = usage;
-  const oppGain = recent.opportunityShare - earlier.opportunityShare;
-  const snapGain = recent.snapShare - earlier.snapShare;
-  const score = clamp01(0.6 * (oppGain / FULL_OPPORTUNITY_GAIN) + 0.4 * (snapGain / FULL_SNAP_GAIN));
-  const reason =
-    score > 0.3
-      ? `Snap share ${pct(earlier.snapShare)} → ${pct(recent.snapShare)}, opportunity share ${pct(earlier.opportunityShare)} → ${pct(recent.opportunityShare)} over the last ${recent.games} games`
-      : null;
-  return { key: "usageTrend", score, reason };
-}
-
 function usageLevel({ player, usage }: BreakoutInput): Signal {
   if (!usage) return { key: "usageLevel", score: 0, reason: null };
   // Smooth curve rather than a cap, so heavy workloads still separate from each other:
   // a full workload scores about 0.86.
-  const score = 1 - Math.exp((-2 * usage.recent.opportunityShare) / FULL_OPPORTUNITY[player.position]);
-  const reason = score > 0.6 ? `Already a ${pct(usage.recent.opportunityShare)} opportunity share` : null;
+  const score = 1 - Math.exp((-2 * usage.opportunityShare) / FULL_OPPORTUNITY[player.position]);
+  const reason =
+    score > 0.6 ? `${pct(usage.opportunityShare)} opportunity share over ${usage.games} games` : null;
   return { key: "usageLevel", score, reason };
 }
 
@@ -144,14 +130,14 @@ export function computeSignals(inputs: BreakoutInput[]): Signal[][] {
       usageByPos.set(player.position, []);
       marketByPos.set(player.position, []);
     }
-    usageByPos.get(player.position)!.push(usage?.recent.opportunityShare ?? 0);
+    usageByPos.get(player.position)!.push(usage?.opportunityShare ?? 0);
     marketByPos.get(player.position)!.push(market ?? 0);
   }
   for (const list of [...usageByPos.values(), ...marketByPos.values()]) list.sort((a, b) => a - b);
 
   return inputs.map((input) => {
     const pos = input.player.position;
-    const usagePct = percentile(usageByPos.get(pos)!, input.usage?.recent.opportunityShare ?? 0);
+    const usagePct = percentile(usageByPos.get(pos)!, input.usage?.opportunityShare ?? 0);
     const marketPct = percentile(marketByPos.get(pos)!, input.market ?? 0);
     const lag = clamp01(usagePct - marketPct);
     const marketLag: Signal = {
@@ -162,7 +148,7 @@ export function computeSignals(inputs: BreakoutInput[]): Signal[][] {
           ? `Usage ranks above ${pct(usagePct)} of ${pos}s, market price only above ${pct(marketPct)}`
           : null,
     };
-    return [usageTrend(input), usageLevel(input), youth(input), draftCapital(input), marketLag];
+    return [usageLevel(input), youth(input), draftCapital(input), marketLag];
   });
 }
 

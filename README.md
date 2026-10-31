@@ -48,7 +48,9 @@ QB data is already ingested. Add `"QB"` to `ENABLED_POSITIONS` in `shared/positi
 
 ## Breakout model
 
-`src/lib/breakout.ts` holds the model: weights and thresholds for five signals (usage trend, usage level, youth, draft capital, market lag). The weights come from the backtest: usage level 0.6, draft capital 0.3 and youth 0.1. Usage trend and market lag scored near chance on their own, so they get no weight until they're redesigned.
+`src/lib/breakout.ts` holds the model: four signals (usage level, youth, draft capital, market lag). Usage level is the player's average opportunity share over every game so far. The weights come from the backtest: usage level 0.6, draft capital 0.3 and youth 0.1. Market lag scored near chance on its own, so it gets no weight.
+
+The model has no rising-usage signal. Nine designs were tested: recent games against earlier games, snap-share jumps, slopes, and usage left behind by teammates who stopped playing. None predicted breakouts better than chance or improved the model, and season-long usage predicted better than recent usage.
 
 The board leaves out players already established as starters (this season or last) and players over the age caps in `MAX_BREAKOUT_AGE` (RB 25, WR 26, TE 27). The backtest uses the same rules, so the board scores the same group of players the weights were tuned on.
 

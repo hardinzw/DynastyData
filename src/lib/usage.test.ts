@@ -36,15 +36,14 @@ describe("buildUsage", () => {
 });
 
 describe("summarizeUsage", () => {
-  it("splits the recent window from earlier games", () => {
+  it("averages every game played", () => {
     const weeks = [1, 2, 3, 4, 5].map((n) =>
       week(n, [line("a", "WR", { off_snp: n * 10, rec_tgt: 1 }), line("b", "WR", { off_snp: 60, rec_tgt: 1 })]),
     );
-    const summary = summarizeUsage(buildUsage(weeks).get("a")!, 3)!;
-    expect(summary.recent.games).toBe(3);
-    expect(summary.earlier!.games).toBe(2);
-    expect(summary.recent.snapShare).toBeCloseTo(40 / 60);
-    expect(summary.earlier!.snapShare).toBeCloseTo(15 / 60);
+    const summary = summarizeUsage(buildUsage(weeks).get("a")!)!;
+    expect(summary.games).toBe(5);
+    expect(summary.snapShare).toBeCloseTo(30 / 60);
+    expect(summary.targetShare).toBeCloseTo(0.5);
   });
 
   it("returns null with no games", () => {
