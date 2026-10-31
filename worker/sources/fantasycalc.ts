@@ -14,7 +14,7 @@ export async function fetchValues({ numQbs, numTeams, ppr }: ValuesParams): Prom
   const url = `https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=${numQbs}&numTeams=${numTeams}&ppr=${ppr}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`FantasyCalc returned ${res.status}`);
-  const raw = await res.json<RawValue[]>();
+  const raw = (await res.json()) as RawValue[];
   const values: ValuesMap = {};
   for (const v of raw) {
     if (!v.player.sleeperId) continue;

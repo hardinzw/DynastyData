@@ -10,6 +10,7 @@
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest",
     "typecheck": "tsc -b",
+    "backtest": "node scripts/backtest.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

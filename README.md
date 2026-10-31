@@ -48,4 +48,20 @@ QB data is already ingested. Add `"QB"` to `ENABLED_POSITIONS` in `shared/positi
 
 ## Breakout model
 
-`src/lib/breakout.ts` holds the v0 model: hand-picked weights and thresholds for five signals (usage trend, usage level, youth, draft capital, market lag). It hasn't been backtested yet.
+`src/lib/breakout.ts` holds the model: weights and thresholds for five signals (usage trend, usage level, youth, draft capital, market lag).
+
+## Backtest
+
+```sh
+npm run backtest                 # both modes
+npm run backtest -- in-season    # score after week 8, check weeks 9-18 (2022-2025)
+npm run backtest -- next-season  # score after a season, check the next one (2021→22 to 2024→25)
+```
+
+- **Breakout** means finishing as a starter by PPR points per game (RB24, WR24, TE12) in the outcome window.
+- **Who gets scored:** RB/WR/TE who played before the cutoff and weren't already starters, either before the cutoff or in the prior season.
+- **No hindsight:** each player's age, team and market price are taken as of the cutoff. The player list includes players who have since left the league.
+- **Market price:** Sleeper's point-in-time redraft ADP, from its projections endpoint. FantasyCalc has no historical values, and Sleeper has no usable ADP before 2022.
+- **"Cheap" players** have positional ADP past 1.5× starter rank (RB/WR 36, TE 18) or no ADP. These are the players the app is meant to find, so weights are tuned on this group, leaving one season out at a time.
+
+Logic is in `src/lib/backtest.ts` and `src/lib/production.ts`. The runner is `scripts/backtest.ts`. Downloads are cached in `.cache/backtest`.

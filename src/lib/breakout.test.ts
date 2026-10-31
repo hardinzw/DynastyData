@@ -36,13 +36,13 @@ describe("rankBreakouts", () => {
       player: player("riser", 22),
       usage: { recent: avg(0.8, 0.22), earlier: avg(0.4, 0.1) },
       draft: { season: 2025, round: 2, pick: 40, team: "KC" },
-      value: { value: 1500, overallRank: 150, positionRank: 60, trend30Day: 0, tier: 8 },
+      market: 1500,
     };
     const veteran: BreakoutInput = {
       player: player("veteran", 30),
       usage: { recent: avg(0.9, 0.25), earlier: avg(0.9, 0.25) },
       draft: { season: 2018, round: 1, pick: 20, team: "KC" },
-      value: { value: 6000, overallRank: 30, positionRank: 12, trend30Day: 0, tier: 3 },
+      market: 6000,
     };
     const [first, second] = rankBreakouts([veteran, riser]);
     expect(first!.player.id).toBe("riser");
@@ -52,7 +52,7 @@ describe("rankBreakouts", () => {
 
   it("scores players with no usage on youth and draft capital alone", () => {
     const [result] = rankBreakouts([
-      { player: player("rookie", 21), usage: null, draft: { season: 2026, round: 1, pick: 5, team: "KC" }, value: null },
+      { player: player("rookie", 21), usage: null, draft: { season: 2026, round: 1, pick: 5, team: "KC" }, market: null },
     ]);
     expect(result!.score).toBe(Math.round(100 * (0.15 + 0.15)));
   });

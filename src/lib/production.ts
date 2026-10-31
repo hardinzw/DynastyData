@@ -1,0 +1,45 @@
+import type { Position } from "../../shared/positions.ts";
+import type { WeekData } from "../../shared/types.ts";
+
+/** Positional PPG rank that counts as a weekly starter: RB24, WR24, TE12, QB12. */
+export const STARTER_RANK: Record<Position, number> = { QB: 12, RB: 24, WR: 24, TE: 12 };
+
+export interface Production {
+  position: Position;
+  games: number;
+  /** PPR points per game. */
+  ppg: number;
+  /** Rank by PPG among players at the position with enough games. Null if too few games. */
+  posRank: number | null;
+}
+
+/** PPR points per game over a set of weeks, ranked within each position. */
+export function production(weeks: WeekData[], minGames: number): Map<string, Production> {
+  const totals = new Map<string, { position: Position; games: number; points: number }>();
+  for (const week of weeks) {
+    for (const line of week.lines) {
+      const t = totals.get(line.playerId) ?? { position: line.position, games: 0, points: 0 };
+      t.games += 1;
+      t.points += line.stats.pts_ppr ?? 0;
+      totals.set(line.playerId, t);
+    }
+  }
+
+  const result = new Map<string, Production>();
+  for (const [id, t] of totals) {
+    result.set(id, { position: t.position, games: t.games, ppg: t.points / t.games, posRank: null });
+  }
+
+  const qualified = [...result.values()].filter((p) => p.games >= minGames).sort((a, b) => b.ppg - a.ppg);
+  const nextRank = new Map<Position, number>();
+  for (const p of qualified) {
+    const rank = (nextRank.get(p.position) ?? 0) + 1;
+    nextRank.set(p.position, rank);
+    p.posRank = rank;
+  }
+  return result;
+}
+
+export function isStarter(p: Production | undefined): boolean {
+  return p?.posRank != null && p.posRank <= STARTER_RANK[p.position];
+}

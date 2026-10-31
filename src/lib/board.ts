@@ -1,5 +1,5 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
-import type { DraftMap, PlayersMap, ValuesMap, WeekData } from "../../shared/types.ts";
+import type { DraftMap, DynastyValue, PlayersMap, ValuesMap, WeekData } from "../../shared/types.ts";
 import type { LeagueUser, Roster } from "../api/sleeper.ts";
 import { rankBreakouts, type BreakoutResult } from "./breakout.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
@@ -10,6 +10,7 @@ export type Ownership =
   | { kind: "rival"; ownerName: string };
 
 export interface BoardRow extends BreakoutResult {
+  value: DynastyValue | null;
   ownership: Ownership;
 }
 
@@ -46,10 +47,11 @@ export function buildBoard({ players, weeks, draft, values, rosters, users, myUs
       player,
       usage: summarizeUsage(usage.get(player.id) ?? []),
       draft: draft[player.id] ?? null,
-      value: values[player.id] ?? null,
+      market: values[player.id]?.value ?? null,
     }));
   return rankBreakouts(inputs).map((r) => ({
     ...r,
+    value: values[r.player.id] ?? null,
     ownership: owned.get(r.player.id) ?? { kind: "available" },
   }));
 }

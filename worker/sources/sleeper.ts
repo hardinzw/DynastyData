@@ -45,7 +45,7 @@ const UNRANKED = 9_999_999;
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} returned ${res.status}`);
-  return res.json<T>();
+  return (await res.json()) as T;
 }
 
 export function fetchState(): Promise<NflState> {
@@ -55,14 +55,17 @@ export function fetchState(): Promise<NflState> {
 /**
  * Downloads the full players list (~15 MB) and keeps QB/RB/WR/TE who are on a team
  * or still ranked. Sleeper asks for this to be fetched at most once a day.
+ *
+ * `includeFormer` keeps players who have since left the league. The backtest needs them,
+ * or past seasons would only contain players who survived.
  */
-export async function fetchPlayers(): Promise<PlayersMap> {
+export async function fetchPlayers({ includeFormer = false } = {}): Promise<PlayersMap> {
   const raw = await getJson<Record<string, RawPlayer>>(`${API}/players/nfl`);
   const players: PlayersMap = {};
   for (const p of Object.values(raw)) {
     if (!isIngestedPosition(p.position)) continue;
     const ranked = p.search_rank != null && p.search_rank < UNRANKED;
-    if (!p.team && !ranked) continue;
+    if (!includeFormer && !p.team && !ranked) continue;
     const rookieYear = Number(p.metadata?.rookie_year);
     players[p.player_id] = {
       id: p.player_id,
