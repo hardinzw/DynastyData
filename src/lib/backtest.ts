@@ -1,7 +1,7 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
 import type { DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
 import { combine, computeSignals, withinAgeCap, type BreakoutInput, type Signal, type SignalKey, type Weights } from "./breakout.ts";
-import { isStarter, production, STARTER_RANK, type Production } from "./production.ts";
+import { isCheap, isStarter, production, type Production } from "./production.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
 
 /**
@@ -28,12 +28,6 @@ export interface Fold {
 
 /** Games needed in the prior season to count as an established starter. */
 const MIN_PRIOR_GAMES = 8;
-
-/**
- * Players the market isn't pricing as starters: positional ADP beyond 1.5× starter rank
- * (RB/WR 36, TE 18), or no ADP. These are the breakouts the app is meant to find.
- */
-const CHEAP_ADP_FACTOR = 1.5;
 
 export interface Sample {
   player: PlayerInfo;
@@ -125,7 +119,7 @@ export function buildSamples(fold: Fold, players: PlayersMap, draft: DraftMap): 
       player,
       signals: signals[i]!,
       adp,
-      cheap: adp == null || adp > CHEAP_ADP_FACTOR * STARTER_RANK[player.position],
+      cheap: isCheap(player.position, adp),
       brokeOut: isStarter(outcome ?? undefined),
       outcome,
     };

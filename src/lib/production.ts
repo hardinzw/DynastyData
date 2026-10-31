@@ -4,6 +4,15 @@ import type { WeekData } from "../../shared/types.ts";
 /** Positional PPG rank that counts as a weekly starter: RB24, WR24, TE12, QB12. */
 export const STARTER_RANK: Record<Position, number> = { QB: 12, RB: 24, WR: 24, TE: 12 };
 
+/**
+ * Whether the market prices a player below starter level: his positional rank in the market
+ * (ADP in the backtest, FantasyCalc in the app) is past 1.5× starter rank (RB/WR 36, TE 18),
+ * or he isn't ranked at all. These are the breakouts the app is meant to find.
+ */
+export function isCheap(position: Position, marketPosRank: number | null): boolean {
+  return marketPosRank == null || marketPosRank > 1.5 * STARTER_RANK[position];
+}
+
 export interface Production {
   position: Position;
   games: number;

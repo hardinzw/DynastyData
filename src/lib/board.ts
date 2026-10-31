@@ -2,7 +2,7 @@ import { ENABLED_POSITIONS } from "../../shared/positions.ts";
 import type { DraftMap, DynastyValue, PlayersMap, ValuesMap, WeekData } from "../../shared/types.ts";
 import type { LeagueUser, Roster } from "../api/sleeper.ts";
 import { rankBreakouts, withinAgeCap, type BreakoutResult } from "./breakout.ts";
-import { isStarter, production } from "./production.ts";
+import { isCheap, isStarter, production } from "./production.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
 
 export type Ownership =
@@ -12,6 +12,8 @@ export type Ownership =
 
 export interface BoardRow extends BreakoutResult {
   value: DynastyValue | null;
+  /** FantasyCalc ranks him outside starter range at his position; see isCheap. */
+  cheap: boolean;
   ownership: Ownership;
 }
 
@@ -66,6 +68,7 @@ export function buildBoard({ players, weeks, priorWeeks, draft, values, rosters,
   return rankBreakouts(inputs).map((r) => ({
     ...r,
     value: values[r.player.id] ?? null,
+    cheap: isCheap(r.player.position, values[r.player.id]?.positionRank ?? null),
     ownership: owned.get(r.player.id) ?? { kind: "available" },
   }));
 }

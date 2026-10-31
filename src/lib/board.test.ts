@@ -65,6 +65,18 @@ describe("buildBoard", () => {
     expect(board.map((r) => r.player.id)).toEqual(["new"]);
   });
 
+  it("flags players FantasyCalc ranks outside starter range as cheap", () => {
+    const value = (positionRank: number) => ({ value: 1000, overallRank: 100, positionRank, trend30Day: 0, tier: null });
+    const board = buildBoard(
+      input({
+        players: { pricey: player("pricey", "WR", 23), cheap: player("cheap", "WR", 23), unvalued: player("unvalued", "WR", 23) },
+        values: { pricey: value(20), cheap: value(50) },
+      }),
+    );
+    const cheap = Object.fromEntries(board.map((r) => [r.player.id, r.cheap]));
+    expect(cheap).toEqual({ pricey: false, cheap: true, unvalued: true });
+  });
+
   it("marks ownership", () => {
     const board = buildBoard(
       input({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WeekData, WeeklyLine } from "../../shared/types.ts";
 import { auc, precisionAtK, weightGrid } from "./backtest.ts";
-import { isStarter, production } from "./production.ts";
+import { isCheap, isStarter, production } from "./production.ts";
 
 describe("auc", () => {
   it("is 1 when every positive outscores every negative", () => {
@@ -59,5 +59,15 @@ describe("production", () => {
     expect(p.get("t")!.posRank).toBe(1);
     expect(isStarter(p.get("t"))).toBe(true);
     expect(isStarter(p.get("c"))).toBe(false);
+  });
+});
+
+describe("isCheap", () => {
+  it("is past 1.5x starter rank, or unranked", () => {
+    expect(isCheap("WR", 36)).toBe(false);
+    expect(isCheap("WR", 37)).toBe(true);
+    expect(isCheap("TE", 18)).toBe(false);
+    expect(isCheap("TE", 19)).toBe(true);
+    expect(isCheap("RB", null)).toBe(true);
   });
 });

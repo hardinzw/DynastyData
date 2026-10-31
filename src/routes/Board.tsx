@@ -14,16 +14,20 @@ import {
 } from "../hooks/queries.ts";
 import { buildBoard, type BoardRow, type Ownership } from "../lib/board.ts";
 import { DEFAULT_WEIGHTS, MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
+import { STARTER_RANK } from "../lib/production.ts";
 import { valuesParamsFor } from "../lib/scoring.ts";
 
 const ROWS_SHOWN = 100;
 
 type OwnershipFilter = "all" | Ownership["kind"];
+type PriceFilter = "cheap" | "all";
 
 export default function Board() {
   const { leagueId = "" } = useParams();
   const [search] = useSearchParams();
   const myUserId = search.get("user");
+  // Cheap players are where the backtest found an edge over the market, so start there.
+  const [price, setPrice] = useState<PriceFilter>("cheap");
   const [position, setPosition] = useState<Position | "ALL">("ALL");
   const [ownership, setOwnership] = useState<OwnershipFilter>("all");
 
@@ -56,6 +60,7 @@ export default function Board() {
   if (!board || !league.data) return <Loading label="Loading players, stats and trade values" />;
 
   const rows = board
+    .filter((r) => price === "all" || r.cheap)
     .filter((r) => position === "ALL" || r.player.position === position)
     .filter((r) => ownership === "all" || r.ownership.kind === ownership)
     .slice(0, ROWS_SHOWN);
@@ -63,14 +68,21 @@ export default function Board() {
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-lg font-medium">
-          {league.data.name} <span className="text-sm text-slate-400">breakout board · {range!.season} stats</span>
-          <p className="text-xs font-normal text-slate-500">
+        <div>
+          <h2 className="text-lg font-medium">
+            {league.data.name} <span className="text-sm text-slate-400">breakout board · {range!.season} stats</span>
+          </h2>
+          <p className="text-xs text-slate-500">
             Leaves out players who are already starters (this season or last) and players over{" "}
-            {ENABLED_POSITIONS.map((p) => `${p} ${MAX_BREAKOUT_AGE[p]}`).join(", ")}.
+            {ENABLED_POSITIONS.map((p) => `${p} ${MAX_BREAKOUT_AGE[p]}`).join(", ")}. “Cheap” means FantasyCalc
+            ranks him outside {ENABLED_POSITIONS.map((p) => `${p}${1.5 * STARTER_RANK[p]}`).join(", ")}.
           </p>
-        </h2>
+        </div>
         <div className="flex gap-2 text-sm">
+          <select value={price} onChange={(e) => setPrice(e.target.value as PriceFilter)} className={selectClass}>
+            <option value="cheap">Cheap only</option>
+            <option value="all">All prices</option>
+          </select>
           <select value={position} onChange={(e) => setPosition(e.target.value as Position | "ALL")} className={selectClass}>
             <option value="ALL">All positions</option>
             {ENABLED_POSITIONS.map((p) => (
