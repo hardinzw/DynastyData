@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { ENABLED_POSITIONS, type Position } from "../../shared/positions.ts";
+import { PlayerPhoto } from "../components/PlayerPhoto.tsx";
 import { ErrorMessage, Loading } from "../components/Status.tsx";
 import {
   LAST_REGULAR_SEASON_WEEK,
@@ -128,10 +129,15 @@ function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
     <tr className="border-b border-slate-900 align-top">
       <td className="py-2 pr-3 text-slate-500">{rank}</td>
       <td className="pr-3">
-        <div className="font-medium">{player.name}</div>
-        <div className="text-xs text-slate-400">
-          {player.position} · {player.team} · {player.age ?? "?"} yrs
-          {player.injuryStatus && <span className="ml-1 text-amber-400">{player.injuryStatus}</span>}
+        <div className="flex items-center gap-3">
+          <PlayerPhoto playerId={player.id} name={player.name} />
+          <div>
+            <div className="font-medium">{player.name}</div>
+            <div className="text-xs text-slate-400">
+              {player.position} · {player.team} · {player.age ?? "?"} yrs
+              {player.injuryStatus && <span className="ml-1 text-amber-400">{player.injuryStatus}</span>}
+            </div>
+          </div>
         </div>
       </td>
       <td className="pr-3 font-semibold text-emerald-400">{score}</td>
