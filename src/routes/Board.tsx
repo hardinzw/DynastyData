@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { isDynasty, type League } from "../api/sleeper.ts";
 import { ENABLED_POSITIONS, type Position } from "../../shared/positions.ts";
 import type { PlayersMap } from "../../shared/types.ts";
 import { PlayerPhoto } from "../components/PlayerPhoto.tsx";
@@ -11,6 +12,7 @@ import {
   useCollege,
   useDraft,
   useLeague,
+  useLeagues,
   useNflState,
   usePlayers,
   useSeasonWeeks,
@@ -37,7 +39,10 @@ export default function Board() {
   const [ownership, setOwnership] = useState<OwnershipFilter>("all");
 
   const state = useNflState();
+  const navigate = useNavigate();
   const { league, rosters, users } = useLeague(leagueId);
+  // The user's other dynasty leagues, for the league switcher. Needs ?user= from the leagues page.
+  const myLeagues = useLeagues(myUserId ?? undefined, league.data?.season);
   const players = usePlayers();
   const draft = useDraft();
   const college = useCollege();
@@ -101,8 +106,13 @@ export default function Board() {
     <section>
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-lg font-medium">
-            {league.data.name} <span className="text-sm text-muted">breakout board · {range!.season} stats</span>
+          <h2 className="flex flex-wrap items-baseline gap-x-2 text-lg font-medium">
+            <LeagueSwitcher
+              current={league.data}
+              leagues={myLeagues.data?.filter(isDynasty) ?? []}
+              onChange={(id) => navigate(`/league/${id}?user=${myUserId}`)}
+            />
+            <span className="text-sm text-muted">breakout board · {range!.season} stats</span>
           </h2>
           <p className="text-xs text-muted">
             Leaves out players who are already starters (this season or last) and players over{" "}
@@ -164,6 +174,33 @@ export default function Board() {
 }
 
 const selectClass = "rounded border border-line bg-card px-2 py-1 text-ink";
+
+/** League name, or a dropdown of the user's dynasty leagues when there's more than one. */
+function LeagueSwitcher({
+  current,
+  leagues,
+  onChange,
+}: {
+  current: League;
+  leagues: League[];
+  onChange: (leagueId: string) => void;
+}) {
+  if (leagues.length < 2) return <span>{current.name}</span>;
+  return (
+    <select
+      aria-label="Switch league"
+      value={current.league_id}
+      onChange={(e) => onChange(e.target.value)}
+      className="max-w-full cursor-pointer rounded border border-line bg-card px-2 py-1 text-lg font-medium text-ink"
+    >
+      {leagues.map((l) => (
+        <option key={l.league_id} value={l.league_id}>
+          {l.name}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function BoardTableRow({
   row,
