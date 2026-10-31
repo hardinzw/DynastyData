@@ -2,19 +2,34 @@ import type { Position } from "../../shared/positions.ts";
 import type { DraftInfo, PlayerInfo } from "../../shared/types.ts";
 import type { UsageSummary } from "./usage.ts";
 
-// v0 model: hand-picked weights and thresholds. Replace with backtested values.
-
 export type SignalKey = "usageTrend" | "usageLevel" | "youth" | "draftCapital" | "marketLag";
 
 export type Weights = Record<SignalKey, number>;
 
+/**
+ * Backtested weights (npm run backtest). A compromise between the best in-season weights
+ * (usage 0.4, youth 0.2, draft 0.4) and the best next-season weights (usage 0.7, draft 0.3).
+ * Usage trend and market lag scored near chance on their own, so they're off until redesigned.
+ */
 export const DEFAULT_WEIGHTS: Weights = {
-  usageTrend: 0.3,
-  usageLevel: 0.2,
-  youth: 0.15,
-  draftCapital: 0.15,
-  marketLag: 0.2,
+  usageTrend: 0,
+  usageLevel: 0.6,
+  youth: 0.1,
+  draftCapital: 0.3,
+  marketLag: 0,
 };
+
+/**
+ * Oldest age that still counts as a dynasty breakout. Older players are left off the board
+ * entirely rather than scored down, so the tuned weights only rank players worth buying.
+ * QB is a placeholder until QB is enabled.
+ */
+export const MAX_BREAKOUT_AGE: Record<Position, number> = { QB: 28, RB: 25, WR: 26, TE: 27 };
+
+/** Players with unknown age are kept; they're almost always rookies. */
+export function withinAgeCap(player: PlayerInfo): boolean {
+  return player.age == null || player.age <= MAX_BREAKOUT_AGE[player.position];
+}
 
 /** Opportunity share that counts as a full workload at each position. */
 const FULL_OPPORTUNITY: Record<Position, number> = { QB: 0.2, RB: 0.45, WR: 0.25, TE: 0.2 };

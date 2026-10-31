@@ -1,6 +1,6 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
 import type { DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
-import { combine, computeSignals, type BreakoutInput, type Signal, type SignalKey, type Weights } from "./breakout.ts";
+import { combine, computeSignals, withinAgeCap, type BreakoutInput, type Signal, type SignalKey, type Weights } from "./breakout.ts";
 import { isStarter, production, STARTER_RANK, type Production } from "./production.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
 
@@ -87,7 +87,7 @@ const priceFromAdp = (adp: number | undefined) => (adp == null ? null : 1000 - a
 
 /**
  * Builds the scored population for one fold: every RB/WR/TE who played in the feature
- * window and wasn't already a starter there or in the prior season.
+ * window, is within the age cap, and wasn't already a starter there or in the prior season.
  */
 export function buildSamples(fold: Fold, players: PlayersMap, draft: DraftMap): Sample[] {
   const prior = production(fold.priorWeeks, MIN_PRIOR_GAMES);
@@ -106,8 +106,10 @@ export function buildSamples(fold: Fold, players: PlayersMap, draft: DraftMap): 
     if (isStarter(before.get(id)) || isStarter(prior.get(id))) continue;
     // Draft picks made after the cutoff can't be known at the cutoff.
     const pick = draft[id];
+    const player = playerAtCutoff(players[id], line, fold);
+    if (!withinAgeCap(player)) continue;
     inputs.push({
-      player: playerAtCutoff(players[id], line, fold),
+      player,
       usage: summarizeUsage(usage.get(id) ?? []),
       draft: pick && pick.season <= Number(fold.cutoffDate.slice(0, 4)) ? pick : null,
       market: priceFromAdp(fold.adp[id]),

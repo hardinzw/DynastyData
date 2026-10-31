@@ -4,7 +4,7 @@ import { sleeper, type NflState } from "../api/sleeper.ts";
 import { workerApi } from "../api/worker.ts";
 
 const HOUR = 60 * 60 * 1000;
-const LAST_REGULAR_SEASON_WEEK = 18;
+export const LAST_REGULAR_SEASON_WEEK = 18;
 
 export function useNflState() {
   return useQuery({ queryKey: ["state"], queryFn: sleeper.state, staleTime: 10 * 60 * 1000 });

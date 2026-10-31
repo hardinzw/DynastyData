@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router";
 import { ENABLED_POSITIONS, type Position } from "../../shared/positions.ts";
 import { ErrorMessage, Loading } from "../components/Status.tsx";
 import {
+  LAST_REGULAR_SEASON_WEEK,
   statsWindow,
   useDraft,
   useLeague,
@@ -12,6 +13,7 @@ import {
   useValues,
 } from "../hooks/queries.ts";
 import { buildBoard, type BoardRow, type Ownership } from "../lib/board.ts";
+import { DEFAULT_WEIGHTS, MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
 import { valuesParamsFor } from "../lib/scoring.ts";
 
 const ROWS_SHOWN = 100;
@@ -32,21 +34,24 @@ export default function Board() {
   const values = useValues(league.data && valuesParamsFor(league.data));
   const range = state.data && statsWindow(state.data);
   const weeks = useSeasonWeeks(range?.season, range?.lastWeek);
+  const priorWeeks = useSeasonWeeks(range && range.season - 1, range && LAST_REGULAR_SEASON_WEEK);
 
   const board = useMemo(() => {
-    if (!players.data || !weeks.data || !draft.data || !values.data || !rosters.data || !users.data) return null;
+    if (!players.data || !weeks.data || !priorWeeks.data || !draft.data || !values.data || !rosters.data || !users.data)
+      return null;
     return buildBoard({
       players: players.data,
       weeks: weeks.data,
+      priorWeeks: priorWeeks.data,
       draft: draft.data,
       values: values.data,
       rosters: rosters.data,
       users: users.data,
       myUserId,
     });
-  }, [players.data, weeks.data, draft.data, values.data, rosters.data, users.data, myUserId]);
+  }, [players.data, weeks.data, priorWeeks.data, draft.data, values.data, rosters.data, users.data, myUserId]);
 
-  const error = [state, league, rosters, users, players, draft, values, weeks].find((q) => q.error)?.error;
+  const error = [state, league, rosters, users, players, draft, values, weeks, priorWeeks].find((q) => q.error)?.error;
   if (error) return <ErrorMessage error={error} />;
   if (!board || !league.data) return <Loading label="Loading players, stats and trade values" />;
 
@@ -60,6 +65,10 @@ export default function Board() {
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-lg font-medium">
           {league.data.name} <span className="text-sm text-slate-400">breakout board · {range!.season} stats</span>
+          <p className="text-xs font-normal text-slate-500">
+            Leaves out players who are already starters (this season or last) and players over{" "}
+            {ENABLED_POSITIONS.map((p) => `${p} ${MAX_BREAKOUT_AGE[p]}`).join(", ")}.
+          </p>
         </h2>
         <div className="flex gap-2 text-sm">
           <select value={position} onChange={(e) => setPosition(e.target.value as Position | "ALL")} className={selectClass}>
@@ -101,7 +110,8 @@ const selectClass = "rounded border border-slate-700 bg-slate-900 px-2 py-1";
 
 function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
   const { player, value, score, signals, ownership } = row;
-  const reasons = signals.map((s) => s.reason).filter(Boolean);
+  // Only signals the model actually weighs; the others scored near chance in the backtest.
+  const reasons = signals.filter((s) => DEFAULT_WEIGHTS[s.key] > 0 && s.reason).map((s) => s.reason);
   return (
     <tr className="border-b border-slate-900 align-top">
       <td className="py-2 pr-3 text-slate-500">{rank}</td>
