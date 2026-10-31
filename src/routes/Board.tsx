@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { ENABLED_POSITIONS, type Position } from "../../shared/positions.ts";
 import { PlayerPhoto } from "../components/PlayerPhoto.tsx";
+import { POSITION_TAG } from "../components/positionColors.ts";
 import { ErrorMessage, Loading } from "../components/Status.tsx";
 import {
   LAST_REGULAR_SEASON_WEEK,
@@ -71,9 +72,9 @@ export default function Board() {
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h2 className="text-lg font-medium">
-            {league.data.name} <span className="text-sm text-slate-400">breakout board · {range!.season} stats</span>
+            {league.data.name} <span className="text-sm text-muted">breakout board · {range!.season} stats</span>
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Leaves out players who are already starters (this season or last) and players over{" "}
             {ENABLED_POSITIONS.map((p) => `${p} ${MAX_BREAKOUT_AGE[p]}`).join(", ")}. “Cheap” means FantasyCalc
             ranks him outside {ENABLED_POSITIONS.map((p) => `${p}${1.5 * STARTER_RANK[p]}`).join(", ")}.
@@ -98,76 +99,90 @@ export default function Board() {
           </select>
         </div>
       </div>
-      <table className="w-full text-left text-sm">
-        <thead className="text-slate-400">
-          <tr className="border-b border-slate-800">
-            <th className="py-2 pr-3">#</th>
-            <th className="pr-3">Player</th>
-            <th className="pr-3">Score</th>
-            <th className="pr-3" title="Average share of the team's targets, carries and air yards, weighted by position">
-              Opp. share
-            </th>
-            <th className="pr-3">Age</th>
-            <th className="pr-3">Draft</th>
-            <th className="pr-3">Value</th>
-            <th>Owner</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <BoardTableRow key={row.player.id} row={row} rank={i + 1} />
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto rounded-lg border border-line bg-card">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-[11px] font-semibold tracking-wider text-muted uppercase">
+              <th className="px-3 py-2.5">#</th>
+              <th className="px-3">Player</th>
+              <th className="px-3">Score</th>
+              <th className="px-3" title="Average share of the team's targets, carries and air yards, weighted by position">
+                Opp. share
+              </th>
+              <th className="px-3">Age</th>
+              <th className="px-3">Draft</th>
+              <th className="px-3">Value</th>
+              <th className="px-3">Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <BoardTableRow key={row.player.id} row={row} rank={i + 1} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
 
-const selectClass = "rounded border border-slate-700 bg-slate-900 px-2 py-1";
+const selectClass = "rounded border border-line bg-card px-2 py-1 text-ink";
+
+/** Scores at or above this get the highlight color, so the top of the board stands out. */
+const HIGH_SCORE = 80;
 
 function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
   const { player, usage, draft, value, score, ownership } = row;
   return (
-    <tr className="border-b border-slate-900 align-middle">
-      <td className="py-2 pr-3 text-slate-500">{rank}</td>
-      <td className="pr-3">
+    <tr className="border-b border-line align-middle last:border-b-0">
+      <td className="px-3 py-2 font-mono text-muted tabular-nums">{rank}</td>
+      <td className="px-3">
         <div className="flex items-center gap-3">
-          <PlayerPhoto playerId={player.id} name={player.name} />
+          <PlayerPhoto playerId={player.id} name={player.name} position={player.position} />
           <div>
-            <div className="font-medium">{player.name}</div>
-            <div className="text-xs text-slate-400">
-              {player.position} · {player.team}
-              {player.injuryStatus && <span className="ml-1 text-amber-400">{player.injuryStatus}</span>}
+            <div className="font-semibold">{player.name}</div>
+            <div className="flex items-center gap-1.5 text-xs text-muted">
+              <span className={`rounded px-1.5 text-[11px] font-semibold ${POSITION_TAG[player.position]}`}>
+                {player.position}
+              </span>
+              {player.team}
+              {player.injuryStatus && (
+                <span className="rounded border border-line px-1 text-[10px] font-semibold uppercase">
+                  {player.injuryStatus}
+                </span>
+              )}
             </div>
           </div>
         </div>
       </td>
-      <td className="pr-3 font-semibold text-emerald-400">{score}</td>
-      <td className="pr-3">
+      <td className={`px-3 font-mono text-base font-semibold tabular-nums ${score >= HIGH_SCORE ? "text-highlight" : ""}`}>
+        {score}
+      </td>
+      <td className="px-3 font-mono tabular-nums">
         {usage ? (
           <>
             <div>{Math.round(usage.opportunityShare * 100)}%</div>
-            <div className="text-xs text-slate-500">{usage.games} games</div>
+            <div className="text-xs text-muted">{usage.games} games</div>
           </>
         ) : (
           <Empty />
         )}
       </td>
-      <td className="pr-3">{player.age ?? <Empty />}</td>
-      <td className="pr-3">
+      <td className="px-3 font-mono tabular-nums">{player.age ?? <Empty />}</td>
+      <td className="px-3 font-mono tabular-nums">
         {draft ? (
           <>
             <div>
               Rd {draft.round}, #{draft.pick}
             </div>
-            <div className="text-xs text-slate-500">{draft.season}</div>
+            <div className="text-xs text-muted">{draft.season}</div>
           </>
         ) : (
           <Empty />
         )}
       </td>
-      <td className="pr-3 text-slate-300">{value ? `${player.position}${value.positionRank}` : <Empty />}</td>
-      <td>
+      <td className="px-3 font-mono tabular-nums">{value ? `${player.position}${value.positionRank}` : <Empty />}</td>
+      <td className="px-3 whitespace-nowrap">
         <OwnershipBadge ownership={ownership} />
       </td>
     </tr>
@@ -175,16 +190,16 @@ function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
 }
 
 function Empty() {
-  return <span className="text-slate-500">—</span>;
+  return <span className="text-muted">—</span>;
 }
 
 function OwnershipBadge({ ownership }: { ownership: Ownership }) {
   switch (ownership.kind) {
     case "available":
-      return <span className="text-emerald-400">Available</span>;
+      return <span className="font-semibold text-accent">Available</span>;
     case "mine":
-      return <span className="text-sky-400">Mine</span>;
+      return <span className="font-semibold text-mine">Mine</span>;
     case "rival":
-      return <span className="text-slate-300">{ownership.ownerName}</span>;
+      return <span className="text-muted">{ownership.ownerName}</span>;
   }
 }

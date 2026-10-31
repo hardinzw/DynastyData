@@ -17,9 +17,9 @@ export default function Home() {
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         placeholder="Sleeper username"
-        className="flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-2"
+        className="flex-1 rounded border border-line bg-card px-3 py-2 placeholder:text-muted"
       />
-      <button className="rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500">Find leagues</button>
+      <button className="rounded bg-accent px-4 py-2 font-medium text-accent-ink hover:opacity-90">Find leagues</button>
     </form>
   );
 }

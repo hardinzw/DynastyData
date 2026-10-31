@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { Position } from "../../shared/positions.ts";
+import { POSITION_RING, POSITION_TEXT } from "./positionColors.ts";
 
 // Sleeper's headshot CDN. Undocumented, like the stats endpoints, but its own app uses it.
 // Unknown players get a 403 rather than a placeholder, so we fall back to initials.
@@ -9,13 +11,17 @@ function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts.at(-1)![0] : "")).toUpperCase();
 }
 
-export function PlayerPhoto({ playerId, name }: { playerId: string; name: string }) {
+export function PlayerPhoto({ playerId, name, position }: { playerId: string; name: string; position: Position }) {
   const [failed, setFailed] = useState(false);
-  const frame = "h-10 w-10 shrink-0 rounded-full bg-slate-800";
+  // Ring in the position color, so position reads at a glance down the table.
+  const frame = `h-10 w-10 shrink-0 rounded-full bg-paper ring-2 ${POSITION_RING[position]}`;
 
   if (failed) {
     return (
-      <div className={`${frame} flex items-center justify-center text-xs font-medium text-slate-400`} aria-hidden>
+      <div
+        className={`${frame} flex items-center justify-center text-xs font-semibold ${POSITION_TEXT[position]}`}
+        aria-hidden
+      >
         {initials(name)}
       </div>
     );

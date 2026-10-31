@@ -21,21 +21,21 @@ export default function Leagues() {
       <h2 className="mb-3 text-lg font-medium">
         {user.data!.display_name}’s dynasty leagues ({state.data!.season})
       </h2>
-      {dynasty.length === 0 && <p className="text-slate-400">No dynasty leagues this season.</p>}
+      {dynasty.length === 0 && <p className="text-muted">No dynasty leagues this season.</p>}
       <ul className="space-y-2">
         {dynasty.map((l) => (
           <li key={l.league_id}>
             <Link
               to={`/league/${l.league_id}?user=${user.data!.user_id}`}
-              className="block rounded border border-slate-800 px-4 py-3 hover:border-emerald-600"
+              className="block rounded border border-line bg-card px-4 py-3 hover:border-accent"
             >
               <span className="font-medium">{l.name}</span>
-              <span className="ml-2 text-sm text-slate-400">{l.total_rosters} teams</span>
+              <span className="ml-2 text-sm text-muted">{l.total_rosters} teams</span>
             </Link>
           </li>
         ))}
       </ul>
-      {skipped > 0 && <p className="mt-3 text-sm text-slate-500">{skipped} redraft or keeper leagues hidden.</p>}
+      {skipped > 0 && <p className="mt-3 text-sm text-muted">{skipped} redraft or keeper leagues hidden.</p>}
     </section>
   );
 }
