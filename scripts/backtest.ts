@@ -6,7 +6,7 @@
 //
 // Downloads are cached in .cache/backtest (see backtest-data.ts).
 
-import type { DraftMap, PlayersMap } from "../shared/types.ts";
+import type { CollegeMap, DraftMap, PlayersMap } from "../shared/types.ts";
 import { combine, DEFAULT_WEIGHTS, type SignalKey, type Weights } from "../src/lib/breakout.ts";
 import {
   buildSamples,
@@ -46,9 +46,9 @@ function compareWithMarket(folds: Fold[], samples: Sample[][]) {
   }
 }
 
-function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftMap) {
+function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftMap, college: CollegeMap) {
   console.log(`\n=== ${name} ===`);
-  const all = folds.map((f) => buildSamples(f, players, draft));
+  const all = folds.map((f) => buildSamples(f, players, draft, college));
   const cheap = all.map((s) => s.filter((x) => x.cheap));
   const keys = Object.keys(DEFAULT_WEIGHTS) as SignalKey[];
 
@@ -107,13 +107,13 @@ function printTop(label: string, samples: Sample[], weights: Weights) {
 async function main() {
   const mode = process.argv[2];
   console.log("Loading data (cached after the first run)…");
-  const { players, draft } = await loadPlayersAndDraft();
+  const { players, draft, college } = await loadPlayersAndDraft();
 
   if (!mode || mode === "in-season") {
-    runMode("In-season: score after week 8, breakout = starter in weeks 9-18", await inSeasonFolds(), players, draft);
+    runMode("In-season: score after week 8, breakout = starter in weeks 9-18", await inSeasonFolds(), players, draft, college);
   }
   if (!mode || mode === "next-season") {
-    runMode("Next season: score after the season, breakout = starter the next season", await nextSeasonFolds(), players, draft);
+    runMode("Next season: score after the season, breakout = starter the next season", await nextSeasonFolds(), players, draft, college);
   }
 }
 

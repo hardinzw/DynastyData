@@ -17,15 +17,17 @@ const player = (id: string, position: PlayerInfo["position"], age: number): Play
   injuryBodyPart: null,
   status: "Active",
   gsisId: null,
+  espnId: null,
+  college: null,
   searchRank: null,
 });
 
-const line = (playerId: string, pts: number): WeeklyLine => ({
+const line = (playerId: string, pts: number, targets = 4): WeeklyLine => ({
   playerId,
   position: "WR",
   team: "KC",
   opponent: null,
-  stats: { pts_ppr: pts, off_snp: 30, tm_off_snp: 60, rec_tgt: 4 },
+  stats: { pts_ppr: pts, off_snp: 30, tm_off_snp: 60, rec_tgt: targets },
 });
 
 const weeks = (season: number, count: number, lines: WeeklyLine[]): WeekData[] =>
@@ -34,8 +36,10 @@ const weeks = (season: number, count: number, lines: WeeklyLine[]): WeekData[] =
 const input = (overrides: Partial<BoardInput>): BoardInput => ({
   players: {},
   weeks: [],
+  inSeason: true,
   priorWeeks: [],
   draft: {},
+  college: {},
   values: {},
   rosters: [],
   users: [],
@@ -95,5 +99,20 @@ describe("buildBoard", () => {
       b: { kind: "rival", ownerName: "Rival FC" },
       c: { kind: "available" },
     });
+  });
+
+  it("notes a teammate ahead of him who has missed the last two games", () => {
+    const players = { lead: player("lead", "WR", 23), backup: player("backup", "WR", 23) };
+    // 24 better WRs on another team, so "backup" isn't ranked a starter.
+    const others = Array.from({ length: 24 }, (_, i): WeeklyLine => ({ ...line(`other${i}`, 20), team: "BUF" }));
+    const weeks = [1, 2, 3, 4, 5].map((week) => ({
+      season: 2026,
+      week,
+      final: true,
+      lines: [...(week <= 3 ? [line("lead", 3, 10)] : []), line("backup", 2, 2), ...others],
+    }));
+    const board = buildBoard(input({ players, weeks }));
+    const backup = board.find((r) => r.player.id === "backup")!;
+    expect(backup.opening.holders.map((h) => h.playerId)).toEqual(["lead"]);
   });
 });

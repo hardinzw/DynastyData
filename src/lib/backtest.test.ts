@@ -30,7 +30,7 @@ describe("precisionAtK", () => {
 
 describe("weightGrid", () => {
   it("lists every weighting that sums to 1", () => {
-    const grid = weightGrid(["usageLevel", "youth", "draftCapital", "marketLag"], 0.5);
+    const grid = weightGrid(["usageLevel", "youth", "draftCapital", "college"], 0.5);
     // 4 weights in steps of 0.5 summing to 1: C(5, 3) = 10.
     expect(grid).toHaveLength(10);
     for (const w of grid) expect(Object.values(w).reduce((a, b) => a + b, 0)).toBeCloseTo(1);

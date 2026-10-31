@@ -5,6 +5,19 @@ const DRAFT_PICKS_URL =
   "https://github.com/nflverse/nflverse-data/releases/download/draft_picks/draft_picks.csv";
 // Earliest draft class that can still matter in a dynasty league.
 const FIRST_SEASON = 2010;
+// nflverse draft picks use Pro Football Reference team codes. Sleeper uses these instead.
+const SLEEPER_TEAM: Record<string, string> = {
+  GNB: "GB",
+  KAN: "KC",
+  LVR: "LV",
+  OAK: "LV",
+  NOR: "NO",
+  NWE: "NE",
+  SFO: "SF",
+  TAM: "TB",
+  SDG: "LAC",
+  STL: "LAR",
+};
 
 /** Splits one CSV line, handling quoted fields. */
 export function parseCsvLine(line: string): string[] {
@@ -77,7 +90,7 @@ export async function fetchDraft(players: PlayersMap): Promise<DraftMap> {
       season,
       round: Number(f[iRound]),
       pick: Number(f[iPick]),
-      team: f[iTeam] ?? "",
+      team: SLEEPER_TEAM[f[iTeam] ?? ""] ?? f[iTeam] ?? "",
     };
   }
   return draft;

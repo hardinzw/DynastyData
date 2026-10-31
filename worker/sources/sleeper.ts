@@ -28,6 +28,8 @@ interface RawPlayer {
   injury_body_part?: string | null;
   status?: string | null;
   gsis_id?: string | null;
+  espn_id?: string | number | null;
+  college?: string | null;
   search_rank?: number | null;
   metadata?: { rookie_year?: string } | null;
 }
@@ -83,6 +85,8 @@ export async function fetchPlayers({ includeFormer = false } = {}): Promise<Play
       status: p.status ?? null,
       // Sleeper sometimes pads gsis_id with whitespace.
       gsisId: p.gsis_id?.trim() || null,
+      espnId: p.espn_id != null ? String(p.espn_id) : null,
+      college: p.college ?? null,
       searchRank: ranked ? p.search_rank! : null,
     };
   }

@@ -3,10 +3,11 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { DraftMap, PlayersMap, WeekData } from "../shared/types.ts";
+import type { CollegeMap, DraftMap, PlayersMap, WeekData } from "../shared/types.ts";
 import type { Fold } from "../src/lib/backtest.ts";
+import { buildCollegeMap, fetchCollegeSeason } from "../worker/sources/college.ts";
 import { fetchDraft } from "../worker/sources/nflverse.ts";
-import { fetchPlayers, fetchWeek } from "../worker/sources/sleeper.ts";
+import { fetchPlayers, fetchState, fetchWeek } from "../worker/sources/sleeper.ts";
 
 const CACHE_DIR = join(import.meta.dirname, "..", ".cache", "backtest");
 // Sleeper's projections have no usable ADP before 2022, so in-season folds start there.
@@ -55,6 +56,7 @@ async function inSeasonFold(season: number): Promise<Fold> {
   const weeks = await loadWeeks(season, 1, LAST_WEEK);
   return {
     label: `${season} wk1-${IN_SEASON_CUTOFF_WEEK} → wk${IN_SEASON_CUTOFF_WEEK + 1}-${LAST_WEEK}`,
+    kind: "in-season",
     priorWeeks: await loadWeeks(season - 1, 1, LAST_WEEK),
     featureWeeks: weeks.slice(0, IN_SEASON_CUTOFF_WEEK),
     outcomeWeeks: weeks.slice(IN_SEASON_CUTOFF_WEEK),
@@ -68,6 +70,7 @@ async function inSeasonFold(season: number): Promise<Fold> {
 async function nextSeasonFold(season: number): Promise<Fold> {
   return {
     label: `${season} → ${season + 1}`,
+    kind: "next-season",
     priorWeeks: await loadWeeks(season - 1, 1, LAST_WEEK),
     featureWeeks: await loadWeeks(season, 1, LAST_WEEK),
     outcomeWeeks: await loadWeeks(season + 1, 1, LAST_WEEK),
@@ -79,10 +82,17 @@ async function nextSeasonFold(season: number): Promise<Fold> {
   };
 }
 
-export async function loadPlayersAndDraft(): Promise<{ players: PlayersMap; draft: DraftMap }> {
-  const players = await cached("players-all", () => fetchPlayers({ includeFormer: true }));
+// College seasons for every draft class the backtest can see (2016 on).
+const FIRST_COLLEGE_SEASON = 2012;
+const LAST_COLLEGE_SEASON = 2025;
+
+export async function loadPlayersAndDraft(): Promise<{ players: PlayersMap; draft: DraftMap; college: CollegeMap }> {
+  const players = await cached("players-all-v2", () => fetchPlayers({ includeFormer: true }));
   const draft = await cached("draft", () => fetchDraft(players));
-  return { players, draft };
+  const seasons = await Promise.all(
+    range(FIRST_COLLEGE_SEASON, LAST_COLLEGE_SEASON).map((s) => cached(`college-${s}`, () => fetchCollegeSeason(s))),
+  );
+  return { players, draft, college: buildCollegeMap(players, seasons) };
 }
 
 /** Score after week 8, breakout = starter in weeks 9-18. */
@@ -97,4 +107,32 @@ export async function nextSeasonFolds(): Promise<Fold[]> {
   const folds = [];
   for (const s of NEXT_SEASON_SEASONS) folds.push(await nextSeasonFold(s));
   return folds;
+}
+
+/**
+ * Last offseason's scores against the current season so far, for the breakout history.
+ * Not used for tuning: the season isn't over. Null outside the regular season or before
+ * enough weeks have been played to rank anyone.
+ */
+export async function currentSeasonFold(): Promise<{ fold: Fold; throughWeek: number } | null> {
+  const state = await fetchState();
+  const season = Number(state.season);
+  const throughWeek = state.week - 1; // Only finished weeks, which are safe to cache.
+  const MIN_WEEKS = 4;
+  if (state.season_type !== "regular" || throughWeek < MIN_WEEKS) return null;
+  return {
+    throughWeek,
+    fold: {
+      label: `${season - 1} → ${season} (through week ${throughWeek})`,
+      kind: "next-season",
+      priorWeeks: await loadWeeks(season - 2, 1, LAST_WEEK),
+      featureWeeks: await loadWeeks(season - 1, 1, LAST_WEEK),
+      outcomeWeeks: await loadWeeks(season, 1, throughWeek),
+      cutoffDate: `${season}-08-01`,
+      adp: await loadAdp(season, 1),
+      minFeatureGames: 8,
+      // Half the weeks played, as the board does.
+      minOutcomeGames: Math.ceil(throughWeek / 2),
+    },
+  };
 }

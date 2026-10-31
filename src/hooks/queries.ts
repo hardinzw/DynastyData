@@ -41,6 +41,10 @@ export function useDraft() {
   return useQuery({ queryKey: ["draft"], queryFn: workerApi.draft, staleTime: 24 * HOUR });
 }
 
+export function useCollege() {
+  return useQuery({ queryKey: ["college"], queryFn: workerApi.college, staleTime: 24 * HOUR });
+}
+
 export function useValues(params: ValuesParams | undefined) {
   return useQuery({
     queryKey: ["values", params],

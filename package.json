@@ -11,6 +11,7 @@
     "test": "vitest",
     "typecheck": "tsc -b",
     "backtest": "node scripts/backtest.ts",
+    "history": "node scripts/history.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

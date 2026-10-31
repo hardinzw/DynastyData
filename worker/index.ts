@@ -1,11 +1,14 @@
-import type { DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "../shared/types.ts";
+import type { CollegeMap, DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "../shared/types.ts";
+import { buildCollegeMap, fetchCollegeSeason, type CollegeRow } from "./sources/college.ts";
 import { fetchDraft } from "./sources/nflverse.ts";
 import { fetchValues } from "./sources/fantasycalc.ts";
 import { fetchPlayers, fetchState, fetchWeek } from "./sources/sleeper.ts";
 
 const KEYS = {
-  players: "players:v1",
+  players: "players:v2",
   draft: "draft:v1",
+  college: "college:v1",
+  collegeSeason: (season: number) => `college-season:v1:${season}`,
   week: (season: number, week: number) => `week:v1:${season}:${week}`,
   values: (p: ValuesParams) => `values:v1:${p.numQbs}:${p.numTeams}:${p.ppr}`,
 };
@@ -14,6 +17,8 @@ const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const LAST_REGULAR_SEASON_WEEK = 18;
+// College seasons kept: enough to cover every player young enough for the board.
+const COLLEGE_SEASONS = 8;
 
 function json(body: unknown, maxAge: number, status = 200): Response {
   return Response.json(body, {
@@ -48,6 +53,33 @@ async function refreshDraft(env: Env, players: PlayersMap): Promise<DraftMap> {
   const draft = await fetchDraft(players);
   await env.DATA.put(KEYS.draft, JSON.stringify(draft));
   return draft;
+}
+
+/** A finished college season never changes, so each is stored forever once fetched. */
+async function getCollegeSeason(env: Env, season: number): Promise<CollegeRow[]> {
+  const key = KEYS.collegeSeason(season);
+  const cached = await env.DATA.get<CollegeRow[]>(key, "json");
+  if (cached) return cached;
+  const rows = await fetchCollegeSeason(season);
+  await env.DATA.put(key, JSON.stringify(rows));
+  return rows;
+}
+
+async function getCollege(env: Env): Promise<CollegeMap> {
+  const cached = await env.DATA.get<CollegeMap>(KEYS.college, "json");
+  if (cached) return cached;
+  return refreshCollege(env, await getPlayers(env));
+}
+
+/** Rebuilt daily so new players (rookies, signings) get matched to their college stats. */
+async function refreshCollege(env: Env, players: PlayersMap): Promise<CollegeMap> {
+  // The NFL season's year: the college season of the same year is still being played.
+  const lastFinished = Number((await fetchState()).season) - 1;
+  const seasons = [];
+  for (let s = lastFinished - COLLEGE_SEASONS + 1; s <= lastFinished; s++) seasons.push(await getCollegeSeason(env, s));
+  const college = buildCollegeMap(players, seasons);
+  await env.DATA.put(KEYS.college, JSON.stringify(college), { expirationTtl: 2 * DAY });
+  return college;
 }
 
 /** Finished weeks are stored forever. The current week is re-fetched every 10 minutes. */
@@ -92,6 +124,7 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (path === "/api/players") return json(await getPlayers(env), HOUR);
   if (path === "/api/draft") return json(await getDraft(env), DAY);
+  if (path === "/api/college") return json(await getCollege(env), DAY);
 
   if (path === "/api/values") {
     const params = parseValuesParams(url);
@@ -127,6 +160,7 @@ export default {
       (async () => {
         const players = await refreshPlayers(env);
         await refreshDraft(env, players);
+        await refreshCollege(env, players);
       })(),
     );
   },

@@ -5,3 +5,8 @@ export function Loading({ label }: { label: string }) {
 export function ErrorMessage({ error }: { error: unknown }) {
   return <p className="text-danger">{error instanceof Error ? error.message : String(error)}</p>;
 }
+
+/** Placeholder for a table cell with no data. */
+export function Empty() {
+  return <span className="text-muted">—</span>;
+}

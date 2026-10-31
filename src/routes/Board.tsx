@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { ENABLED_POSITIONS, type Position } from "../../shared/positions.ts";
+import type { PlayersMap } from "../../shared/types.ts";
 import { PlayerPhoto } from "../components/PlayerPhoto.tsx";
 import { POSITION_TAG } from "../components/positionColors.ts";
-import { ErrorMessage, Loading } from "../components/Status.tsx";
+import { Empty, ErrorMessage, Loading } from "../components/Status.tsx";
 import {
   LAST_REGULAR_SEASON_WEEK,
   statsWindow,
+  useCollege,
   useDraft,
   useLeague,
   useNflState,
@@ -15,9 +17,10 @@ import {
   useValues,
 } from "../hooks/queries.ts";
 import { buildBoard, type BoardRow, type Ownership } from "../lib/board.ts";
-import { MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
+import { describeCollegeStat, MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
 import { STARTER_RANK } from "../lib/production.ts";
 import { valuesParamsFor } from "../lib/scoring.ts";
+import { ScoreCell, TierLegend } from "../components/ScoreTier.tsx";
 
 const ROWS_SHOWN = 100;
 
@@ -37,27 +40,54 @@ export default function Board() {
   const { league, rosters, users } = useLeague(leagueId);
   const players = usePlayers();
   const draft = useDraft();
+  const college = useCollege();
   const values = useValues(league.data && valuesParamsFor(league.data));
   const range = state.data && statsWindow(state.data);
   const weeks = useSeasonWeeks(range?.season, range?.lastWeek);
   const priorWeeks = useSeasonWeeks(range && range.season - 1, range && LAST_REGULAR_SEASON_WEEK);
 
+  const inSeason = state.data?.season_type === "regular";
+
   const board = useMemo(() => {
-    if (!players.data || !weeks.data || !priorWeeks.data || !draft.data || !values.data || !rosters.data || !users.data)
+    if (
+      !players.data ||
+      !weeks.data ||
+      !priorWeeks.data ||
+      !draft.data ||
+      !college.data ||
+      !values.data ||
+      !rosters.data ||
+      !users.data
+    )
       return null;
     return buildBoard({
       players: players.data,
       weeks: weeks.data,
+      inSeason,
       priorWeeks: priorWeeks.data,
       draft: draft.data,
+      college: college.data,
       values: values.data,
       rosters: rosters.data,
       users: users.data,
       myUserId,
     });
-  }, [players.data, weeks.data, priorWeeks.data, draft.data, values.data, rosters.data, users.data, myUserId]);
+  }, [
+    players.data,
+    weeks.data,
+    inSeason,
+    priorWeeks.data,
+    draft.data,
+    college.data,
+    values.data,
+    rosters.data,
+    users.data,
+    myUserId,
+  ]);
 
-  const error = [state, league, rosters, users, players, draft, values, weeks, priorWeeks].find((q) => q.error)?.error;
+  const error = [state, league, rosters, users, players, draft, college, values, weeks, priorWeeks].find(
+    (q) => q.error,
+  )?.error;
   if (error) return <ErrorMessage error={error} />;
   if (!board || !league.data) return <Loading label="Loading players, stats and trade values" />;
 
@@ -99,8 +129,9 @@ export default function Board() {
           </select>
         </div>
       </div>
+      <TierLegend />
       <div className="overflow-x-auto rounded-lg border border-line bg-card">
-        <table className="w-full min-w-[760px] text-left text-sm">
+        <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-[11px] font-semibold tracking-wider text-muted uppercase">
               <th className="px-3 py-2.5">#</th>
@@ -111,13 +142,19 @@ export default function Board() {
               </th>
               <th className="px-3">Age</th>
               <th className="px-3">Draft</th>
+              <th
+                className="px-3"
+                title="RB: share of team receiving yards, final season. TE: target share, final season. WR: age at first season with 20% of team receiving yards."
+              >
+                College
+              </th>
               <th className="px-3">Value</th>
               <th className="px-3">Owner</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <BoardTableRow key={row.player.id} row={row} rank={i + 1} />
+              <BoardTableRow key={row.player.id} row={row} rank={i + 1} players={players.data!} inSeason={inSeason} />
             ))}
           </tbody>
         </table>
@@ -128,11 +165,19 @@ export default function Board() {
 
 const selectClass = "rounded border border-line bg-card px-2 py-1 text-ink";
 
-/** Scores at or above this get the highlight color, so the top of the board stands out. */
-const HIGH_SCORE = 80;
-
-function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
-  const { player, usage, draft, value, score, ownership } = row;
+function BoardTableRow({
+  row,
+  rank,
+  players,
+  inSeason,
+}: {
+  row: BoardRow;
+  rank: number;
+  players: PlayersMap;
+  inSeason: boolean;
+}) {
+  const { player, usage, draft, college, value, score, ownership, opening } = row;
+  const openedBy = opening.holders.map((h) => players[h.playerId]?.name ?? h.playerId).join(", ");
   return (
     <tr className="border-b border-line align-middle last:border-b-0">
       <td className="px-3 py-2 font-mono text-muted tabular-nums">{rank}</td>
@@ -152,12 +197,18 @@ function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
                 </span>
               )}
             </div>
+            {openedBy && (
+              <div
+                className="text-xs text-muted"
+                title="Teammates ahead of him who are gone. Context only: the backtest found this didn't predict breakouts, so it isn't in the score."
+              >
+                {inSeason ? "Out ahead of him" : "Left ahead of him"}: {openedBy}
+              </div>
+            )}
           </div>
         </div>
       </td>
-      <td className={`px-3 font-mono text-base font-semibold tabular-nums ${score >= HIGH_SCORE ? "text-highlight" : ""}`}>
-        {score}
-      </td>
+      <ScoreCell score={score} />
       <td className="px-3 font-mono tabular-nums">
         {usage ? (
           <>
@@ -181,16 +232,13 @@ function BoardTableRow({ row, rank }: { row: BoardRow; rank: number }) {
           <Empty />
         )}
       </td>
+      <td className="px-3 text-xs whitespace-nowrap">{college ? describeCollegeStat(college) : <Empty />}</td>
       <td className="px-3 font-mono tabular-nums">{value ? `${player.position}${value.positionRank}` : <Empty />}</td>
       <td className="px-3 whitespace-nowrap">
         <OwnershipBadge ownership={ownership} />
       </td>
     </tr>
   );
-}
-
-function Empty() {
-  return <span className="text-muted">—</span>;
 }
 
 function OwnershipBadge({ ownership }: { ownership: Ownership }) {

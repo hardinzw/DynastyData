@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from "react-router";
 import { ThemeToggle } from "./components/ThemeToggle.tsx";
 import Board from "./routes/Board.tsx";
+import History from "./routes/History.tsx";
 import Home from "./routes/Home.tsx";
 import Leagues from "./routes/Leagues.tsx";
 
@@ -14,12 +15,18 @@ export default function App() {
           </Link>
           <p className="text-sm text-muted">Find dynasty breakout candidates before the market does.</p>
         </div>
-        <ThemeToggle />
+        <nav className="flex items-center gap-4 text-sm">
+          <Link to="/history" className="font-medium text-muted hover:text-ink">
+            Breakout history
+          </Link>
+          <ThemeToggle />
+        </nav>
       </header>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/u/:username" element={<Leagues />} />
         <Route path="/league/:leagueId" element={<Board />} />
+        <Route path="/history" element={<History />} />
       </Routes>
     </div>
   );

@@ -16,6 +16,9 @@ export interface PlayerInfo {
   injuryBodyPart: string | null;
   status: string | null;
   gsisId: string | null;
+  /** ESPN athlete id. ESPN keeps the same id from college to the NFL. */
+  espnId: string | null;
+  college: string | null;
   searchRank: number | null;
 }
 
@@ -100,3 +103,25 @@ export interface ValuesParams {
   /** Points per reception: 0, 0.5 or 1. */
   ppr: number;
 }
+
+/**
+ * One college season for one player, with his team's totals for computing shares.
+ * From ESPN play-by-play, published by sportsdataverse. FBS games only.
+ */
+export interface CollegeSeason {
+  season: number;
+  team: string;
+  games: number;
+  targets: number;
+  teamTargets: number;
+  recYards: number;
+  teamRecYards: number;
+  rushes: number;
+  rushYards: number;
+  teamRushYards: number;
+  firstDowns: number;
+  teamFirstDowns: number;
+}
+
+/** College seasons before each player's rookie year, oldest first, by Sleeper player id. */
+export type CollegeMap = Record<string, CollegeSeason[]>;

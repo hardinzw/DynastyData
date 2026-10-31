@@ -1,6 +1,7 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
-import type { DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
+import type { CollegeMap, DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
 import { combine, computeSignals, withinAgeCap, type BreakoutInput, type Signal, type SignalKey, type Weights } from "./breakout.ts";
+import { currentlyOut, openingFor, roleHolders, type Opening, type RoleHolder } from "./opening.ts";
 import { isCheap, isStarter, production, type Production } from "./production.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
 
@@ -10,6 +11,11 @@ import { buildUsage, summarizeUsage } from "./usage.ts";
  */
 export interface Fold {
   label: string;
+  /**
+   * in-season: scored mid-season, outcome is the rest of the season.
+   * next-season: scored in the offseason after the draft, outcome is the next season.
+   */
+  kind: "in-season" | "next-season";
   /** The full season before the feature window. Starters there are already established. */
   priorWeeks: WeekData[];
   /** Weeks available at the cutoff. */
@@ -31,7 +37,10 @@ const MIN_PRIOR_GAMES = 8;
 
 export interface Sample {
   player: PlayerInfo;
+  input: BreakoutInput;
   signals: Signal[];
+  /** Teammates ahead of him who were gone at the cutoff. Not scored; see opening.ts. */
+  opening: Opening;
   /** Positional ADP at the cutoff, or null if unranked. */
   adp: number | null;
   cheap: boolean;
@@ -52,13 +61,15 @@ function ageOn(birthDate: string | null, date: string): number | null {
   return age;
 }
 
-/** The player as he was at the cutoff: that week's team and position, and his age then. */
-function playerAtCutoff(base: PlayerInfo | undefined, line: WeeklyLine, fold: Fold): PlayerInfo {
+type Spot = Pick<WeeklyLine, "position" | "team">;
+
+/** The player as he was at the cutoff: his team and position then, and his age then. */
+function playerAtCutoff(base: PlayerInfo | undefined, id: string, spot: Spot, fold: Fold): PlayerInfo {
   const season = Number(fold.cutoffDate.slice(0, 4));
   return {
     ...(base ?? {
-      id: line.playerId,
-      name: line.playerId,
+      id,
+      name: id,
       birthDate: null,
       rookieYear: null,
       depthChartPosition: null,
@@ -67,63 +78,107 @@ function playerAtCutoff(base: PlayerInfo | undefined, line: WeeklyLine, fold: Fo
       injuryBodyPart: null,
       status: null,
       gsisId: null,
+      espnId: null,
+      college: null,
       searchRank: null,
     }),
-    position: line.position,
-    team: line.team,
+    position: spot.position,
+    team: spot.team,
     age: ageOn(base?.birthDate ?? null, fold.cutoffDate),
     yearsExp: base?.rookieYear != null ? Math.max(0, season - base.rookieYear) : null,
   };
 }
 
-/** Turns positional ADP into a market price where higher is more expensive. */
-const priceFromAdp = (adp: number | undefined) => (adp == null ? null : 1000 - adp);
+/** Each player's team in his first game of a window. */
+function firstTeams(weeks: WeekData[]): Map<string, string> {
+  const first = new Map<string, string>();
+  for (const week of [...weeks].sort((a, b) => a.week - b.week)) {
+    for (const l of week.lines) if (!first.has(l.playerId)) first.set(l.playerId, l.team);
+  }
+  return first;
+}
+
+export interface SampleOptions {
+  /** Keep players over the dynasty age cap. The breakout history shows them; tuning doesn't. */
+  ignoreAgeCap?: boolean;
+}
 
 /**
  * Builds the scored population for one fold: every RB/WR/TE who played in the feature
- * window, is within the age cap, and wasn't already a starter there or in the prior season.
+ * window and wasn't already a starter there or in the prior season, within the age cap.
+ * Next-season folds also score the incoming rookie class, which is drafted by the cutoff.
+ *
+ * In next-season folds a player's team is his team in his first game of the next season,
+ * standing in for the roster at the cutoff (August 1); there's no dated roster history.
  */
-export function buildSamples(fold: Fold, players: PlayersMap, draft: DraftMap): Sample[] {
+export function buildSamples(
+  fold: Fold,
+  players: PlayersMap,
+  draft: DraftMap,
+  college: CollegeMap,
+  { ignoreAgeCap = false }: SampleOptions = {},
+): Sample[] {
+  const cutoffYear = Number(fold.cutoffDate.slice(0, 4));
   const prior = production(fold.priorWeeks, MIN_PRIOR_GAMES);
   const before = production(fold.featureWeeks, fold.minFeatureGames);
   const after = production(fold.outcomeWeeks, fold.minOutcomeGames);
   const usage = buildUsage(fold.featureWeeks);
+  const holders = roleHolders(usage);
+
+  // Who counts as gone: hurt right now in-season, or on a new team after the offseason.
+  const nextTeam = fold.kind === "next-season" ? firstTeams(fold.outcomeWeeks) : new Map<string, string>();
+  const out = fold.kind === "in-season" ? currentlyOut(fold.featureWeeks) : new Set<string>();
+  const gone = (h: RoleHolder) =>
+    fold.kind === "in-season"
+      ? out.has(`${h.playerId}|${h.team}`)
+      : nextTeam.has(h.playerId) && nextTeam.get(h.playerId) !== h.team;
 
   const lastLine = new Map<string, WeeklyLine>();
   for (const week of [...fold.featureWeeks].sort((a, b) => a.season - b.season || a.week - b.week)) {
     for (const line of week.lines) lastLine.set(line.playerId, line);
   }
-
-  const inputs: BreakoutInput[] = [];
+  const candidates: { id: string; spot: Spot }[] = [];
   for (const [id, line] of lastLine) {
-    if (!ENABLED_POSITIONS.includes(line.position)) continue;
-    if (isStarter(before.get(id)) || isStarter(prior.get(id))) continue;
-    // Draft picks made after the cutoff can't be known at the cutoff.
-    const pick = draft[id];
-    const player = playerAtCutoff(players[id], line, fold);
-    if (!withinAgeCap(player)) continue;
-    inputs.push({
-      player,
-      usage: summarizeUsage(usage.get(id) ?? []),
-      draft: pick && pick.season <= Number(fold.cutoffDate.slice(0, 4)) ? pick : null,
-      market: priceFromAdp(fold.adp[id]),
-    });
+    candidates.push({ id, spot: { position: line.position, team: nextTeam.get(id) ?? line.team } });
+  }
+  if (fold.kind === "next-season") {
+    for (const [id, pick] of Object.entries(draft)) {
+      const position = players[id]?.position;
+      if (pick.season !== cutoffYear || !position || lastLine.has(id)) continue;
+      candidates.push({ id, spot: { position, team: pick.team } });
+    }
   }
 
-  const signals = computeSignals(inputs);
-  return inputs.map((input, i) => {
-    const { player } = input;
-    const outcome = after.get(player.id) ?? null;
-    const adp = fold.adp[player.id] ?? null;
-    return {
+  const samples: Sample[] = [];
+  for (const { id, spot } of candidates) {
+    if (!ENABLED_POSITIONS.includes(spot.position)) continue;
+    if (isStarter(before.get(id)) || isStarter(prior.get(id))) continue;
+    const player = playerAtCutoff(players[id], id, spot, fold);
+    if (!ignoreAgeCap && !withinAgeCap(player)) continue;
+    const averages = summarizeUsage(usage.get(id) ?? []);
+    // Draft picks made after the cutoff can't be known at the cutoff.
+    const pick = draft[id];
+    const share = averages?.opportunityShare ?? 0;
+    const input: BreakoutInput = {
       player,
-      signals: signals[i]!,
+      usage: averages,
+      draft: pick && pick.season <= cutoffYear ? pick : null,
+      college: college[id] ?? [],
+    };
+    const outcome = after.get(id) ?? null;
+    const adp = fold.adp[id] ?? null;
+    samples.push({
+      player,
+      input,
+      signals: computeSignals(input),
+      opening: openingFor({ id, team: player.team, position: player.position, share }, holders, gone),
       adp,
       cheap: isCheap(player.position, adp),
       brokeOut: isStarter(outcome ?? undefined),
       outcome,
-    };
-  });
+    });
+  }
+  return samples;
 }
 
 /**
