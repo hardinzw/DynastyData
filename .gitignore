@@ -10,3 +10,5 @@ dist
 # Working docs, kept local
 docs/architecture-overview.md
 docs/model-executive-summary.md
+docs/architecture-overview.html
+docs/model-executive-summary.html
