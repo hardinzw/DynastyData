@@ -33,7 +33,6 @@ const input = (overrides: Partial<SnapshotInput>): SnapshotInput => ({
   weeks: [],
   priorWeeks: [],
   draft: {},
-  college: {},
   values: {},
   ...overrides,
 });
@@ -78,6 +77,17 @@ describe("buildSnapshot", () => {
     const weeks = [{ season: 2026, week: 1, final: true, lines: [] }];
     const [row] = buildSnapshot(input({ players, draft, weeks })).rows;
     expect(row!.tier).toBe("Rookie prospect");
+  });
+
+  it("marks usage carried over from last season", () => {
+    const players = { hurt: player("hurt", "WR", 24) };
+    const line = { playerId: "hurt", position: "WR" as const, team: "KC", opponent: null, stats: { off_snp: 30, rec_tgt: 2 } };
+    const priorWeeks = [{ season: 2025, week: 1, final: true, lines: [line] }];
+    const weeks = [{ season: 2026, week: 1, final: true, lines: [] }];
+    const [row] = buildSnapshot(input({ players, weeks, priorWeeks })).rows;
+    expect(row!.usageFromLastSeason).toBe(true);
+    expect(row!.tier).toBe("Missed season");
+    expect(row!.signals.usageLevel).not.toBeNull();
   });
 
   it("keeps prices for players who aren't on the board", () => {

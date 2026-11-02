@@ -5,7 +5,8 @@ import { PlayerPhoto } from "../components/PlayerPhoto.tsx";
 import { POSITION_TAG } from "../components/positionColors.ts";
 import { ScoreCell, TierLegend } from "../components/ScoreTier.tsx";
 import { Empty, ErrorMessage, Loading } from "../components/Status.tsx";
-import { describeCollegeStat, scoreTier, SCORE_TIERS } from "../lib/breakout.ts";
+import { scoreTier, SCORE_TIERS } from "../lib/breakout.ts";
+import { describeCollegeStat } from "../lib/college.ts";
 import type { History as HistoryData, HistoryRow } from "../lib/history.ts";
 
 // Built by `npm run history` and served as a static file.
@@ -132,7 +133,9 @@ export default function History() {
               </th>
               <th className="px-3">Age</th>
               <th className="px-3">Draft</th>
-              <th className="px-3">College</th>
+              <th className="px-3" title="Not part of the score">
+                College
+              </th>
               <th className="px-3" title="Sleeper positional ADP at the time">
                 ADP then
               </th>
@@ -157,6 +160,7 @@ function HistoryTableRow({ row, seasonLabel }: { row: HistoryRow; seasonLabel: (
   const { usage, draft, college, outcome } = row;
   const notes = [
     !usage && "Rookie",
+    row.usageFromLastSeason && "Missed the season before, usage from the one earlier",
     row.overAgeCap && "Over age cap",
     row.openedBy.length > 0 && `${row.kind === "in-season" ? "Out" : "Left"} ahead of him: ${row.openedBy.join(", ")}`,
   ].filter(Boolean);

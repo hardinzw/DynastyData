@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WeekData, WeeklyLine } from "../../shared/types.ts";
-import { auc, precisionAtK, weightGrid } from "./backtest.ts";
-import { isCheap, isStarter, production } from "./production.ts";
+import { auc, buildSamples, precisionAtK, topResult, weightGrid, type Fold, type Sample } from "./backtest.ts";
+import { gradedCredit, isCheap, isImpact, isStarter, production, type Production } from "./production.ts";
 
 describe("auc", () => {
   it("is 1 when every positive outscores every negative", () => {
@@ -30,10 +30,94 @@ describe("precisionAtK", () => {
 
 describe("weightGrid", () => {
   it("lists every weighting that sums to 1", () => {
-    const grid = weightGrid(["usageLevel", "youth", "draftCapital", "college"], 0.5);
-    // 4 weights in steps of 0.5 summing to 1: C(5, 3) = 10.
-    expect(grid).toHaveLength(10);
+    const grid = weightGrid(["usageLevel", "draftCapital"], 0.5);
+    // 2 weights in steps of 0.5 summing to 1: 0/1, 0.5/0.5, 1/0.
+    expect(grid).toHaveLength(3);
     for (const w of grid) expect(Object.values(w).reduce((a, b) => a + b, 0)).toBeCloseTo(1);
+  });
+});
+
+describe("buildSamples", () => {
+  const line = (playerId: string): WeeklyLine => ({
+    playerId,
+    position: "WR",
+    team: "KC",
+    opponent: null,
+    stats: { pts_ppr: 1, off_snp: 10, rec_tgt: 2 },
+  });
+  const week = (season: number, lines: WeeklyLine[]): WeekData => ({ season, week: 1, final: true, lines });
+
+  it("scores a player who missed the window on the season before it", () => {
+    const fold: Fold = {
+      label: "test",
+      kind: "in-season",
+      priorWeeks: [week(2024, [line("hurt"), line("x")])],
+      featureWeeks: [week(2025, [line("x")])],
+      outcomeWeeks: [week(2025, [line("x")])],
+      cutoffDate: "2025-11-01",
+      adp: {},
+      minFeatureGames: 4,
+      minOutcomeGames: 5,
+    };
+    const samples = buildSamples(fold, {}, {});
+    const hurt = samples.find((s) => s.player.id === "hurt")!;
+    expect(hurt.usageFromLastSeason).toBe(true);
+    expect(hurt.input.usage!.games).toBe(1);
+    expect(samples.find((s) => s.player.id === "x")!.usageFromLastSeason).toBe(false);
+  });
+});
+
+describe("gradedCredit", () => {
+  const finish = (position: Production["position"], ppg: number, posRank: number | null = 30): Production => ({
+    position,
+    games: 10,
+    ppg,
+    posRank,
+  });
+
+  it("is PPG above each position's replacement level", () => {
+    expect(gradedCredit(finish("RB", 12))).toBe(2);
+    expect(gradedCredit(finish("WR", 12))).toBe(1);
+    expect(gradedCredit(finish("TE", 12))).toBe(4);
+  });
+
+  it("is 0 below replacement, with too few games, or without a result", () => {
+    expect(gradedCredit(finish("WR", 7))).toBe(0);
+    expect(gradedCredit(finish("WR", 18, null))).toBe(0);
+    expect(gradedCredit(undefined)).toBe(0);
+  });
+});
+
+describe("isImpact", () => {
+  const finish = (position: Production["position"], ppg: number, posRank: number | null = 10): Production => ({
+    position,
+    games: 10,
+    ppg,
+    posRank,
+  });
+
+  it("uses 15 PPG for RB and WR, and 11 for TE", () => {
+    expect(isImpact(finish("RB", 15))).toBe(true);
+    expect(isImpact(finish("WR", 14.9))).toBe(false);
+    expect(isImpact(finish("TE", 11))).toBe(true);
+    expect(isImpact(finish("TE", 10.9))).toBe(false);
+  });
+
+  it("needs enough games to be ranked", () => {
+    expect(isImpact(finish("WR", 20, null))).toBe(false);
+    expect(isImpact(undefined)).toBe(false);
+  });
+});
+
+describe("topResult", () => {
+  const sample = (score: number, ppg: number) =>
+    ({ score, outcome: { position: "WR", games: 10, ppg, posRank: 10 } }) as unknown as Sample;
+  const score = (s: Sample) => (s as unknown as { score: number }).score;
+
+  it("averages credit and counts Impact among the top k only", () => {
+    const samples = [sample(1, 30), sample(3, 16), sample(2, 11)];
+    // Top 2 are 16 PPG (5 credit, Impact) and 11 PPG (0 credit). The 30 PPG player ranks last.
+    expect(topResult(samples, score, 2)).toEqual({ credit: 2.5, impact: 1 });
   });
 });
 

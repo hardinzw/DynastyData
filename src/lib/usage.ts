@@ -103,6 +103,22 @@ export interface UsageAverages {
 }
 
 /**
+ * Usage to score a player on: this season's, or last season's if he hasn't played this
+ * season. Without this, a veteran who missed the season would be scored on his draft pick
+ * alone, and a hurt early pick would rate above players who are actually on the field.
+ */
+export function usageOrLastSeason(
+  id: string,
+  current: Map<string, UsageWeek[]>,
+  lastSeason: Map<string, UsageWeek[]>,
+): { usage: UsageAverages | null; fromLastSeason: boolean } {
+  const games = current.get(id);
+  if (games?.length) return { usage: summarizeUsage(games), fromLastSeason: false };
+  const usage = summarizeUsage(lastSeason.get(id) ?? []);
+  return { usage, fromLastSeason: usage != null };
+}
+
+/**
  * A player's average usage over every game he played. The backtest found the whole
  * window predicts breakouts better than recent games or any measure of rising usage.
  */

@@ -14,8 +14,7 @@ import { buildSnapshot, formatKey } from "../src/lib/snapshot.ts";
 import { fetchDraft } from "../worker/sources/nflverse.ts";
 import { fetchValues } from "../worker/sources/fantasycalc.ts";
 import { fetchPlayers, fetchState } from "../worker/sources/sleeper.ts";
-import { buildCollegeMap } from "../worker/sources/college.ts";
-import { loadCollegeSeasons, loadWeeks } from "./backtest-data.ts";
+import { loadWeeks } from "./backtest-data.ts";
 
 const OUT_DIR = join(import.meta.dirname, "..", "data", "snapshots");
 const LAST_WEEK = 18;
@@ -50,7 +49,6 @@ if (existsSync(file) && !dryRun) {
 // Fresh, not the backtest's cached copies: teams and ages have to be as of today.
 const players = await fetchPlayers();
 const draft = await fetchDraft(players);
-const college = buildCollegeMap(players, await loadCollegeSeasons());
 const values: Record<string, ValuesMap> = {};
 for (const format of FORMATS) values[formatKey(format)] = await fetchValues(format);
 
@@ -63,7 +61,6 @@ const snapshot = buildSnapshot({
   weeks: await loadWeeks(season, 1, throughWeek),
   priorWeeks: await loadWeeks(season - 1, 1, LAST_WEEK),
   draft,
-  college,
   values,
 });
 

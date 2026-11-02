@@ -9,17 +9,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildSamples } from "../src/lib/backtest.ts";
 import { historyRows, type History } from "../src/lib/history.ts";
-import { currentSeasonFold, inSeasonFolds, loadPlayersAndDraft, nextSeasonFolds } from "./backtest-data.ts";
+import { currentSeasonFold, inSeasonFolds, loadCollege, loadPlayersAndDraft, nextSeasonFolds } from "./backtest-data.ts";
 
 const OUT_DIR = join(import.meta.dirname, "..", "public", "data");
 
-const { players, draft, college } = await loadPlayersAndDraft();
+const { players, draft } = await loadPlayersAndDraft();
+const college = await loadCollege(players);
 const names = (id: string) => players[id]?.name ?? id;
 const current = await currentSeasonFold();
 const folds = [...(await inSeasonFolds()), ...(await nextSeasonFolds()), ...(current ? [current.fold] : [])];
 const rows = [];
 for (const fold of folds) {
-  rows.push(...historyRows(fold, buildSamples(fold, players, draft, college, { ignoreAgeCap: true }), names));
+  rows.push(...historyRows(fold, buildSamples(fold, players, draft, { ignoreAgeCap: true }), names, college));
 }
 
 const history: History = {

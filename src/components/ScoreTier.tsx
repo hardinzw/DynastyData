@@ -1,4 +1,4 @@
-import { ROOKIE_TIERS, SCORE_TIERS, scoreTier, type BoardTier } from "../lib/breakout.ts";
+import { MISSED_SEASON_TIER, NO_RECENT_GAMES_TIER, ROOKIE_TIERS, SCORE_TIERS, scoreTier, type BoardTier } from "../lib/breakout.ts";
 
 const TIER_TEXT: Record<BoardTier["label"], string> = {
   Strong: "text-highlight",
@@ -7,6 +7,8 @@ const TIER_TEXT: Record<BoardTier["label"], string> = {
   Unlikely: "text-muted/70",
   "Rookie prospect": "text-ink",
   "Rookie long shot": "text-muted",
+  "No recent games": "text-muted/70",
+  "Missed season": "text-muted",
 };
 
 const range = (i: number) => {
@@ -29,9 +31,20 @@ export function TierLegend({ rookies = false }: { rookies?: boolean }) {
       {rookies &&
         ROOKIE_TIERS.map((t) => (
           <span key={t.label} className="basis-full">
-            <span className="font-semibold text-ink">{t.label}</span> · no games yet, {t.min > 0 ? `${t.min}+` : "under 60"} · {t.odds}
+            <span className="font-semibold text-ink">{t.label}</span> · no games yet, {t.min > 0 ? `${t.min}+` : `under ${ROOKIE_TIERS[0].min}`} · {t.odds}
           </span>
         ))}
+      {rookies && (
+        <span className="basis-full">
+          <span className="font-semibold text-ink">{MISSED_SEASON_TIER.label}</span> · no games this season, scored on last
+          season's usage · {MISSED_SEASON_TIER.odds}
+        </span>
+      )}
+      {rookies && (
+        <span className="basis-full">
+          <span className="font-semibold text-ink">{NO_RECENT_GAMES_TIER.label}</span> · {NO_RECENT_GAMES_TIER.odds}
+        </span>
+      )}
     </div>
   );
 }

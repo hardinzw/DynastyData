@@ -6,19 +6,22 @@
 //
 // Downloads are cached in .cache/backtest (see backtest-data.ts).
 
-import type { CollegeMap, DraftMap, PlayersMap } from "../shared/types.ts";
-import { combine, DEFAULT_WEIGHTS, type SignalKey, type Weights } from "../src/lib/breakout.ts";
+import type { DraftMap, PlayersMap } from "../shared/types.ts";
+import { combine, DEFAULT_WEIGHTS, SCORE_TIERS, scoreTier, type SignalKey, type Weights } from "../src/lib/breakout.ts";
 import {
   buildSamples,
   evaluate,
   evaluateScores,
   signalAucs,
+  topResult,
   tuneWeights,
   weightGrid,
   type Evaluation,
   type Fold,
   type Sample,
 } from "../src/lib/backtest.ts";
+import { IMPACT_PPG, REPLACEMENT_PPG } from "../src/lib/production.ts";
+import { ENABLED_POSITIONS, type Position } from "../shared/positions.ts";
 import { inSeasonFolds, loadPlayersAndDraft, nextSeasonFolds } from "./backtest-data.ts";
 
 const f2 = (n: number) => (Number.isNaN(n) ? "  —  " : n.toFixed(3));
@@ -34,6 +37,7 @@ function evalLine(label: string, e: Evaluation): string {
   return `${label.padEnd(26)} n=${String(e.samples).padStart(4)}  breakouts=${String(e.breakouts).padStart(3)} (${pctStr(e.breakouts / e.samples)})  AUC ${f2(e.auc)}  top-20 hit rate ${pctStr(e.precisionAt20)}`;
 }
 
+const positionLine = (ppg: Record<Position, number>) => ENABLED_POSITIONS.map((p) => `${p} ${ppg[p]}`).join(", ");
 const marketScore = (s: Sample) => (s.adp == null ? 0 : 1000 - s.adp);
 const mean = (list: number[]) => list.reduce((a, b) => a + b, 0) / list.length;
 
@@ -46,9 +50,45 @@ function compareWithMarket(folds: Fold[], samples: Sample[][]) {
   }
 }
 
-function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftMap, college: CollegeMap) {
+/** How each method's top 20 finished, on the graded measure and the Impact rung. */
+function compareTop20(samples: Sample[][]) {
+  const signal = (key: SignalKey) => (s: Sample) => s.signals.find((x) => x.key === key)!.score;
+  const methods: [string, (s: Sample) => number][] = [
+    ["Model", (s) => combine(s.signals, DEFAULT_WEIGHTS)],
+    ["Usage alone", signal("usageLevel")],
+    ["Draft pick alone", signal("draftCapital")],
+    ["ADP alone", marketScore],
+  ];
+  console.log(
+    `\nTop 20 by each method, cheap players. Credit = average PPG above ${positionLine(REPLACEMENT_PPG)}. Impact = ${positionLine(IMPACT_PPG)} or better:`,
+  );
+  for (const [label, score] of methods) {
+    const results = samples.map((s) => topResult(s, score));
+    const credits = results.map((r) => r.credit);
+    const impacts = results.map((r) => r.impact);
+    console.log(
+      `  ${label.padEnd(18)} credit ${f2(mean(credits))} [${credits.map(f2).join(" ")}]  Impact hits ${impacts.reduce((a, b) => a + b, 0)} [${impacts.join(" ")}]`,
+    );
+  }
+}
+
+/**
+ * Players who missed the feature window, scored on the season before it. Reported apart
+ * from the main numbers: some have left the league, so they'd inflate AUC with easy misses.
+ */
+function reportMissedSeason(samples: Sample[][]) {
+  const missed = samples.flat().filter((s) => s.cheap && s.usageFromLastSeason);
+  console.log("\nCheap players with no games in the window, scored on the season before it:");
+  for (const tier of SCORE_TIERS) {
+    const group = missed.filter((s) => scoreTier(Math.round(combine(s.signals, DEFAULT_WEIGHTS))).label === tier.label);
+    console.log(`  ${tier.label.padEnd(10)} n=${String(group.length).padStart(4)}  breakouts ${group.filter((s) => s.brokeOut).length}`);
+  }
+}
+
+function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftMap) {
   console.log(`\n=== ${name} ===`);
-  const all = folds.map((f) => buildSamples(f, players, draft, college));
+  const samples = folds.map((f) => buildSamples(f, players, draft));
+  const all = samples.map((s) => s.filter((x) => !x.usageFromLastSeason));
   const cheap = all.map((s) => s.filter((x) => x.cheap));
   const keys = Object.keys(DEFAULT_WEIGHTS) as SignalKey[];
 
@@ -83,6 +123,8 @@ function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftM
   row("ADP alone", market);
   row("Default weights", defaults);
   row("Tuned (held out)", heldOut);
+  compareTop20(cheap);
+  reportMissedSeason(samples);
   const best = tuneWeights(cheap, grid);
   console.log(`Best weights on all seasons: ${formatWeights(best.weights)} (mean AUC ${f2(best.meanAuc)})`);
 
@@ -107,13 +149,13 @@ function printTop(label: string, samples: Sample[], weights: Weights) {
 async function main() {
   const mode = process.argv[2];
   console.log("Loading data (cached after the first run)…");
-  const { players, draft, college } = await loadPlayersAndDraft();
+  const { players, draft } = await loadPlayersAndDraft();
 
   if (!mode || mode === "in-season") {
-    runMode("In-season: score after week 8, breakout = starter in weeks 9-18", await inSeasonFolds(), players, draft, college);
+    runMode("In-season: score after week 8, breakout = starter in weeks 9-18", await inSeasonFolds(), players, draft);
   }
   if (!mode || mode === "next-season") {
-    runMode("Next season: score after the season, breakout = starter the next season", await nextSeasonFolds(), players, draft, college);
+    runMode("Next season: score after the season, breakout = starter the next season", await nextSeasonFolds(), players, draft);
   }
 }
 

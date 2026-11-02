@@ -63,8 +63,48 @@ describe("buildBoard", () => {
     const rook = board.find((r) => r.player.id === "rook")!;
     const vet = board.find((r) => r.player.id === "vet")!;
     expect(rook).toMatchObject({ rookie: true, tier: { label: "Rookie prospect" } });
-    expect(vet).toMatchObject({ rookie: false, tier: { label: "Strong" } });
+    expect(vet).toMatchObject({ rookie: false, tier: { label: "No recent games" } });
     expect(rook.score).toBe(vet.score);
+  });
+
+  it("scores a veteran who missed this season on last season's usage", () => {
+    const players = { hurt: player("hurt", "WR", 24), other: player("other", "WR", 24) };
+    const draft = { hurt: { season: 2023, round: 1, pick: 8, team: "KC" } };
+    // Too few games last season to rank as a starter.
+    const board = buildBoard(
+      input({
+        players,
+        draft,
+        weeks: weeks(2026, 3, [line("other", 5)]),
+        priorWeeks: weeks(2025, 2, [line("hurt", 5, 1), line("other", 5, 9)]),
+      }),
+    );
+    const hurt = board.find((r) => r.player.id === "hurt")!;
+    expect(hurt.usageFromLastSeason).toBe(true);
+    expect(hurt.usage!.games).toBe(2);
+    expect(hurt.score).toBeLessThan(Math.round(100 * Math.exp(-8 / 120)));
+    expect(hurt.rookie).toBe(false);
+    expect(hurt.tier.label).toBe("Missed season");
+  });
+
+  it("shows college stats without changing the score", () => {
+    const players = { wr: player("wr", "WR", 23) };
+    const seasons = [{ season: 2022, team: "State", games: 12, targets: 100, teamTargets: 400, recYards: 900, teamRecYards: 3000, rushes: 0, rushYards: 0, teamRushYards: 2000, firstDowns: 40, teamFirstDowns: 250 }];
+    const plain = buildBoard(input({ players }))[0]!;
+    const shown = buildBoard(input({ players: { wr: { ...players.wr, birthDate: "2002-03-01" } }, college: { wr: seasons } }))[0]!;
+    expect(plain.college).toBeNull();
+    expect(shown.college).toMatchObject({ kind: "breakoutAge", season: 2022 });
+    expect(shown.score).toBe(plain.score);
+  });
+
+  it("doesn't rate a veteran with no games this season or last, and ranks him last", () => {
+    const players = { gone: player("gone", "WR", 24), active: player("active", "WR", 24) };
+    const draft = { gone: { season: 2022, round: 1, pick: 1, team: "KC" } };
+    // One game of four is too few to rank him as a starter.
+    const season = [...weeks(2026, 1, [line("active", 5, 1)]), ...weeks(2026, 3, [])];
+    const board = buildBoard(input({ players, draft, weeks: season }));
+    expect(board.map((r) => r.player.id)).toEqual(["active", "gone"]);
+    expect(board[1]!.tier.label).toBe("No recent games");
   });
 
   it("leaves out players who were starters this season or last", () => {

@@ -1,12 +1,12 @@
 # DynastyData
 
-Finds dynasty fantasy football breakout candidates in your Sleeper leagues. It ranks RB, WR and TE by their share of the offense, draft capital, youth and college production, and shows how past breakouts scored before they happened.
+Finds dynasty fantasy football breakout candidates in your Sleeper leagues. It ranks RB, WR and TE by their share of the offense and draft capital, and shows how past breakouts scored before they happened. College production is shown next to each player but isn't scored.
 
 ## Stack
 
 - **App:** Vite, React, TypeScript, TanStack Query, React Router, Tailwind
 - **Worker:** Cloudflare Worker serving `/api/*` and the built app, with KV for caching
-- **Data:** Sleeper (league data, players, weekly stats), FantasyCalc (dynasty trade values), nflverse (draft picks), sportsdataverse (college stats from ESPN play-by-play)
+- **Data:** Sleeper (league data, players, weekly stats), FantasyCalc (dynasty trade values), nflverse (draft picks), sportsdataverse (college stats from ESPN play-by-play, display only)
 
 ## Commands
 
@@ -47,7 +47,7 @@ data/snapshots/  weekly scores and prices, built by npm run snapshot
 
 The weekly stats endpoint is undocumented, so Sleeper can change it without notice. All calls to it are in `worker/sources/sleeper.ts`.
 
-College stats come from sportsdataverse's `espn_cfb_usage_players` release on GitHub (free, no key, FBS games only, 2004 on). Players are joined by ESPN id, which ESPN keeps from college to the NFL, falling back to name. About 86% of board-eligible players match; most of the rest played at FCS schools.
+College stats come from sportsdataverse's `espn_cfb_usage_players` release on GitHub (free, no key, FBS games only, 2004 on). Players are joined by ESPN id, which ESPN keeps from college to the NFL, falling back to name. About 86% of board-eligible players match; most of the rest played at FCS schools. The College column shows RB share of team receiving yards, TE target share and WR breakout age. Logic is in `src/lib/college.ts`.
 
 ## Adding QB
 
@@ -55,49 +55,48 @@ QB data is already ingested. Add `"QB"` to `ENABLED_POSITIONS` in `shared/positi
 
 ## Breakout model
 
-`src/lib/breakout.ts` holds the model. The score is a weighted average of four signals, each 0 to 1, with weights from the backtest:
+`src/lib/breakout.ts` holds the model. The score is a weighted average of two signals, each 0 to 1, with weights from the backtest:
 
 | Signal | Weight | What it measures |
 |---|---|---|
-| Usage level | 0.5 | Average opportunity share over every game so far: RB 0.6 carry share + 0.4 target share; WR/TE 0.7 target share + 0.3 air-yard share |
-| Draft capital | 0.3 | Draft pick, falling off smoothly (pick 1 = 1.0, pick 32 = 0.77, pick 100 = 0.43) |
-| Youth | 0.1 | Full score up to RB 24, WR 24, TE 25, falling to 0 by RB 27, WR 28, TE 29 |
-| College | 0.1 | RB: share of team receiving yards, final college season. TE: target share, final season. WR: age at first season with 20% of team receiving yards |
+| Usage level | 0.6 | Average opportunity share over every game so far: RB 0.6 carry share + 0.4 target share; WR/TE 0.7 target share + 0.3 air-yard share |
+| Draft capital | 0.4 | Draft pick, falling off smoothly (pick 1 = 1.0, pick 32 = 0.77, pick 100 = 0.43) |
 
-A signal with no data (usage for a rookie before his first game, college for an FCS player) is left out of the average instead of scored as 0.
-
-The college stats are the ones that predicted NFL starter seasons beyond draft pick across the 2020-23 draft classes. WR college market share added nothing once draft pick was known. In the backtest, college is roughly neutral (it moves held-out AUC by less than 0.005), so it gets a small weight.
+A player with no games this season is scored on last season's usage, which the board marks. With no games last season either, usage is left out of the average instead of scored as 0, so his score is his draft pick alone.
 
 Tried and left out of the score:
 
 - **Rising usage.** Nine designs: recent games against earlier games, snap-share jumps, slopes, and usage left behind by teammates. None beat chance, and season-long usage predicted better than recent usage.
 - **Market lag** (usage rank above trade-value rank) scored near chance.
 - **Opportunity opened up**: share held by teammates ahead of him who are hurt (missed the team's last two games) or, in the offseason, moved teams. It scored below chance, so the board shows it as a note under the player's name but doesn't score it. Logic is in `src/lib/opening.ts`.
+- **Youth and college production.** Together they moved AUC by under 0.01 and didn't improve the top 20, so they're out of the score. College stats are still shown on the board, and the age caps below still apply.
 - **Efficiency** (yards per target, per snap, catch rate, YAC and others) added nothing beyond usage.
 
 The board leaves out players already established as starters (this season or last) and players over the age caps in `MAX_BREAKOUT_AGE` (RB 25, WR 26, TE 27). The backtest uses the same rules, so the board scores the same group of players the weights were tuned on.
 
 ### What a score means
 
-Breakout rates by score among cheap players in the backtest (2021-2025, both test modes, about 2,200 player-seasons):
+Breakout rates by score among cheap players with NFL games in the backtest (2021-2025, both test modes, about 2,000 player-seasons):
 
 | Score | Label | Broke out |
 |---|---|---|
-| 75+ | Strong | 21% (about 1 in 5) |
-| 60-74 | Watch | 7% (about 1 in 14) |
-| 40-59 | Long shot | 1.7% (about 1 in 60) |
-| Under 40 | Unlikely | 0 of 1,257 |
+| 75+ | Strong | 28% (14 of 50) |
+| 60-74 | Watch | 10% (15 of 151) |
+| 40-59 | Long shot | 1.9% (7 of 365) |
+| Under 40 | Unlikely | 0.3% (4 of 1,421) |
 
-About 2% of cheap players break out overall, so a Strong score is roughly 10 times the base rate. The score ranks players; it isn't a probability. These rates are measured on the same seasons the weights were tuned on, so they're slightly optimistic. The tiers are in `SCORE_TIERS`.
+About 2% of cheap players break out overall, so a Strong score is more than 10 times the base rate. The score ranks players; it isn't a probability. These rates are measured on the same seasons the weights were tuned on, so they're slightly optimistic. The tiers are in `SCORE_TIERS`.
 
-Rookies who haven't played get their own labels, because they break out on a different timeline. Their scores are unchanged:
+Rookies who haven't played get their own labels, because they break out on a different timeline:
 
 | Score | Label | Broke out in year one (2022-25 classes) | Within three years (2022-23 classes) |
 |---|---|---|---|
-| 60+ | Rookie prospect | 6 of 74 (about 1 in 12) | 18 of 44 (about 4 in 10) |
-| Under 60 | Rookie long shot | 3 of 177 (about 1 in 60) | 6 of 82 (about 1 in 14) |
+| 50+ | Rookie prospect | 6 of 72 (about 1 in 12) | 15 of 40 (about 4 in 10) |
+| Under 50 | Rookie long shot | 3 of 179 (about 1 in 60) | 9 of 86 (about 1 in 10) |
 
-Veterans with no games this season have no such label yet. Their usage is left out of the score too, which the backtest doesn't cover, so an injured veteran's score can run high.
+Veterans with no games this season or last show "No recent games" with no odds, and sort below everyone else.
+
+Players scored on last season's usage show "Missed season" instead of a normal tier. They keep their score and place in the order, so a high score here should be read with caution. They're tested separately, because some of them have left the league and would inflate AUC with easy misses. None of the 531 cheap ones in the backtest broke out or reached Impact, and none scored 75 or higher.
 
 ## Breakout history
 
@@ -133,6 +132,8 @@ npm run backtest -- next-season  # score after a season, check the next one (202
 ```
 
 - **Breakout** means finishing as a starter by PPR points per game (RB24, WR24, TE12) in the outcome window.
+- **Graded credit** gives each player his PPG above replacement (RB 10, WR 11, TE 8), roughly where he stops being cheap at his position, and 0 below that or with too few games. The output averages it over each method's top 20, so it uses every result rather than only who crossed a line.
+- **Impact** is a higher line for difference-makers: RB and WR 15+ PPG, TE 11+. Both lines are in `src/lib/production.ts`. They're measured but don't tune the weights, which still use AUC on breakouts.
 - **Who gets scored:** RB/WR/TE who played before the cutoff and weren't already starters, either before the cutoff or in the prior season. Next-season tests also score the incoming rookie class, since the draft happens before the cutoff (August 1).
 - **No hindsight:** each player's age, team and market price are taken as of the cutoff. The player list includes players who have since left the league. One exception: there's no dated roster history, so in next-season tests a player's team is his team in his first game of the next season, standing in for his August roster.
 - **Market price:** Sleeper's point-in-time redraft ADP, from its projections endpoint. FantasyCalc has no historical values, and Sleeper has no usable ADP before 2022.

@@ -1,9 +1,9 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
-import type { CollegeMap, DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
+import type { DraftMap, PlayerInfo, PlayersMap, WeekData, WeeklyLine } from "../../shared/types.ts";
 import { combine, computeSignals, withinAgeCap, type BreakoutInput, type Signal, type SignalKey, type Weights } from "./breakout.ts";
 import { currentlyOut, openingFor, roleHolders, type Opening, type RoleHolder } from "./opening.ts";
-import { isCheap, isStarter, production, type Production } from "./production.ts";
-import { buildUsage, summarizeUsage } from "./usage.ts";
+import { gradedCredit, isCheap, isImpact, isStarter, production, type Production } from "./production.ts";
+import { buildUsage, usageOrLastSeason } from "./usage.ts";
 
 /**
  * One historical test: score players as of a cutoff, then check who became a starter
@@ -38,6 +38,8 @@ const MIN_PRIOR_GAMES = 8;
 export interface Sample {
   player: PlayerInfo;
   input: BreakoutInput;
+  /** He hadn't played in the feature window, so `input.usage` is from the season before. */
+  usageFromLastSeason: boolean;
   signals: Signal[];
   /** Teammates ahead of him who were gone at the cutoff. Not scored; see opening.ts. */
   opening: Opening;
@@ -105,8 +107,12 @@ export interface SampleOptions {
 
 /**
  * Builds the scored population for one fold: every RB/WR/TE who played in the feature
- * window and wasn't already a starter there or in the prior season, within the age cap.
+ * window or the prior season and wasn't already a starter in either, within the age cap.
  * Next-season folds also score the incoming rookie class, which is drafted by the cutoff.
+ *
+ * Players who missed the feature window are scored on the prior season's usage, as on the
+ * board. Some will have left the league, which the board would leave out because they have
+ * no team; there's no dated roster history to do the same here.
  *
  * In next-season folds a player's team is his team in his first game of the next season,
  * standing in for the roster at the cutoff (August 1); there's no dated roster history.
@@ -115,7 +121,6 @@ export function buildSamples(
   fold: Fold,
   players: PlayersMap,
   draft: DraftMap,
-  college: CollegeMap,
   { ignoreAgeCap = false }: SampleOptions = {},
 ): Sample[] {
   const cutoffYear = Number(fold.cutoffDate.slice(0, 4));
@@ -123,6 +128,7 @@ export function buildSamples(
   const before = production(fold.featureWeeks, fold.minFeatureGames);
   const after = production(fold.outcomeWeeks, fold.minOutcomeGames);
   const usage = buildUsage(fold.featureWeeks);
+  const priorUsage = buildUsage(fold.priorWeeks);
   const holders = roleHolders(usage);
 
   // Who counts as gone: hurt right now in-season, or on a new team after the offseason.
@@ -141,10 +147,18 @@ export function buildSamples(
   for (const [id, line] of lastLine) {
     candidates.push({ id, spot: { position: line.position, team: nextTeam.get(id) ?? line.team } });
   }
+  const lastPriorLine = new Map<string, WeeklyLine>();
+  for (const week of [...fold.priorWeeks].sort((a, b) => a.week - b.week)) {
+    for (const line of week.lines) lastPriorLine.set(line.playerId, line);
+  }
+  for (const [id, line] of lastPriorLine) {
+    if (lastLine.has(id)) continue;
+    candidates.push({ id, spot: { position: line.position, team: nextTeam.get(id) ?? line.team } });
+  }
   if (fold.kind === "next-season") {
     for (const [id, pick] of Object.entries(draft)) {
       const position = players[id]?.position;
-      if (pick.season !== cutoffYear || !position || lastLine.has(id)) continue;
+      if (pick.season !== cutoffYear || !position || lastLine.has(id) || lastPriorLine.has(id)) continue;
       candidates.push({ id, spot: { position, team: pick.team } });
     }
   }
@@ -155,21 +169,21 @@ export function buildSamples(
     if (isStarter(before.get(id)) || isStarter(prior.get(id))) continue;
     const player = playerAtCutoff(players[id], id, spot, fold);
     if (!ignoreAgeCap && !withinAgeCap(player)) continue;
-    const averages = summarizeUsage(usage.get(id) ?? []);
+    const { usage: averages, fromLastSeason } = usageOrLastSeason(id, usage, priorUsage);
     // Draft picks made after the cutoff can't be known at the cutoff.
     const pick = draft[id];
-    const share = averages?.opportunityShare ?? 0;
+    const share = fromLastSeason ? 0 : (averages?.opportunityShare ?? 0);
     const input: BreakoutInput = {
       player,
       usage: averages,
       draft: pick && pick.season <= cutoffYear ? pick : null,
-      college: college[id] ?? [],
     };
     const outcome = after.get(id) ?? null;
     const adp = fold.adp[id] ?? null;
     samples.push({
       player,
       input,
+      usageFromLastSeason: fromLastSeason,
       signals: computeSignals(input),
       opening: openingFor({ id, team: player.team, position: player.position, share }, holders, gone),
       adp,
@@ -209,6 +223,22 @@ export function precisionAtK(scores: number[], labels: boolean[], k: number): nu
     .sort((a, b) => b[0] - a[0])
     .slice(0, k);
   return top.filter(([, l]) => l).length / top.length;
+}
+
+export interface TopResult {
+  /** Average PPG above replacement across the top players; see gradedCredit. */
+  credit: number;
+  /** How many of them reached Impact; see isImpact. */
+  impact: number;
+}
+
+/** How the top `k` by `score` finished. Uses every result, not just who crossed a line. */
+export function topResult(samples: Sample[], score: (s: Sample) => number, k = 20): TopResult {
+  const top = [...samples].sort((a, b) => score(b) - score(a)).slice(0, k);
+  return {
+    credit: top.reduce((sum, s) => sum + gradedCredit(s.outcome ?? undefined), 0) / top.length,
+    impact: top.filter((s) => isImpact(s.outcome ?? undefined)).length,
+  };
 }
 
 export interface Evaluation {

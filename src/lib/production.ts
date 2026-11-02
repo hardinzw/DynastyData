@@ -13,6 +13,15 @@ export function isCheap(position: Position, marketPosRank: number | null): boole
   return marketPosRank == null || marketPosRank > 1.5 * STARTER_RANK[position];
 }
 
+/**
+ * PPG where a player starts earning credit: roughly where he stops being cheap at his
+ * position (RB36, WR36, TE18). QB is a placeholder until QB is enabled.
+ */
+export const REPLACEMENT_PPG: Record<Position, number> = { QB: 15, RB: 10, WR: 11, TE: 8 };
+
+/** PPG that counts as a difference-maker. QB is a placeholder until QB is enabled. */
+export const IMPACT_PPG: Record<Position, number> = { QB: 20, RB: 15, WR: 15, TE: 11 };
+
 export interface Production {
   position: Position;
   games: number;
@@ -51,4 +60,13 @@ export function production(weeks: WeekData[], minGames: number): Map<string, Pro
 
 export function isStarter(p: Production | undefined): boolean {
   return p?.posRank != null && p.posRank <= STARTER_RANK[p.position];
+}
+
+export function isImpact(p: Production | undefined): boolean {
+  return p?.posRank != null && p.ppg >= IMPACT_PPG[p.position];
+}
+
+/** PPG above replacement. Zero below it or with too few games to be ranked. */
+export function gradedCredit(p: Production | undefined): number {
+  return p?.posRank != null ? Math.max(0, p.ppg - REPLACEMENT_PPG[p.position]) : 0;
 }

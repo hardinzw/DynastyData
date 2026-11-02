@@ -1,10 +1,11 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
 import type { CollegeMap, DraftMap, DynastyValue, PlayersMap, ValuesMap, WeekData } from "../../shared/types.ts";
 import type { LeagueUser, Roster } from "../api/sleeper.ts";
-import { isUnplayedRookie, rankBreakouts, rookieTier, scoreTier, withinAgeCap, type BoardTier, type BreakoutResult } from "./breakout.ts";
+import { isUnplayedRookie, MISSED_SEASON_TIER, NO_RECENT_GAMES_TIER, rankBreakouts, rookieTier, scoreTier, withinAgeCap, type BoardTier, type BreakoutResult } from "./breakout.ts";
+import { collegeStat, type CollegeStat } from "./college.ts";
 import { currentlyOut, openingFor, roleHolders, type Opening, type RoleHolder } from "./opening.ts";
 import { isCheap, isStarter, production } from "./production.ts";
-import { buildUsage, summarizeUsage } from "./usage.ts";
+import { buildUsage, usageOrLastSeason } from "./usage.ts";
 
 export type Ownership =
   | { kind: "available" }
@@ -14,7 +15,11 @@ export type Ownership =
 export interface BoardRow extends BreakoutResult {
   /** A rookie who hasn't played. His tier comes from ROOKIE_TIERS; the score is unchanged. */
   rookie: boolean;
+  /** He hasn't played this season, so `usage` is from last season. */
+  usageFromLastSeason: boolean;
   tier: BoardTier;
+  /** Shown next to the player. Not part of the score. */
+  college: CollegeStat | null;
   value: DynastyValue | null;
   /** FantasyCalc ranks him outside starter range at his position; see isCheap. */
   cheap: boolean;
@@ -72,6 +77,7 @@ export function buildBoard({
   myUserId,
 }: BoardInput): BoardRow[] {
   const usage = buildUsage(weeks);
+  const lastSeasonUsage = buildUsage(priorWeeks);
   const holders = roleHolders(usage);
   // In-season, gone means missing the team's last two games. In the offseason, it means
   // Sleeper now lists him on another team or none.
@@ -88,24 +94,41 @@ export function buildBoard({
     .filter((p) => !isStarter(current.get(p.id)) && !isStarter(prior.get(p.id)))
     .map((player) => ({
       player,
-      usage: summarizeUsage(usage.get(player.id) ?? []),
+      usage: usageOrLastSeason(player.id, usage, lastSeasonUsage).usage,
       draft: draft[player.id] ?? null,
-      college: college[player.id] ?? [],
     }));
   const scoredSeason = weeks[0]?.season;
   const rookieRow = (r: BreakoutResult) =>
     scoredSeason != null && isUnplayedRookie(r.player, r.draft, r.usage, scoredSeason);
-  return rankBreakouts(inputs).map((r) => ({
-    ...r,
-    rookie: rookieRow(r),
-    tier: rookieRow(r) ? rookieTier(r.score) : scoreTier(r.score),
-    opening: openingFor(
-      { id: r.player.id, team: r.player.team, position: r.player.position, share: r.usage?.opportunityShare ?? 0 },
-      holders,
-      gone,
-    ),
-    value: values[r.player.id] ?? null,
-    cheap: isCheap(r.player.position, values[r.player.id]?.positionRank ?? null),
-    ownership: owned.get(r.player.id) ?? { kind: "available" },
-  }));
+  const tierOf = (r: BreakoutResult, fromLastSeason: boolean): BoardTier => {
+    if (rookieRow(r)) return rookieTier(r.score);
+    if (fromLastSeason) return MISSED_SEASON_TIER;
+    return r.usage ? scoreTier(r.score) : NO_RECENT_GAMES_TIER;
+  };
+  return rankBreakouts(inputs)
+    .map((r) => {
+      const { fromLastSeason } = usageOrLastSeason(r.player.id, usage, lastSeasonUsage);
+      return {
+        ...r,
+        rookie: rookieRow(r),
+        usageFromLastSeason: fromLastSeason,
+        tier: tierOf(r, fromLastSeason),
+        college: collegeStat(r.player, college[r.player.id] ?? []),
+        opening: openingFor(
+          {
+            id: r.player.id,
+            team: r.player.team,
+            position: r.player.position,
+            // Teammates ahead of him are judged on what he's done this season.
+            share: fromLastSeason ? 0 : (r.usage?.opportunityShare ?? 0),
+          },
+          holders,
+          gone,
+        ),
+        value: values[r.player.id] ?? null,
+        cheap: isCheap(r.player.position, values[r.player.id]?.positionRank ?? null),
+        ownership: owned.get(r.player.id) ?? { kind: "available" },
+      };
+    })
+    .sort((a, b) => Number(a.tier === NO_RECENT_GAMES_TIER) - Number(b.tier === NO_RECENT_GAMES_TIER));
 }

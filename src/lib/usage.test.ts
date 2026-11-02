@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WeekData, WeeklyLine } from "../../shared/types.ts";
-import { buildUsage, summarizeUsage } from "./usage.ts";
+import { buildUsage, summarizeUsage, usageOrLastSeason, type UsageWeek } from "./usage.ts";
 
 const line = (playerId: string, position: WeeklyLine["position"], stats: WeeklyLine["stats"]): WeeklyLine => ({
   playerId,
@@ -48,5 +48,27 @@ describe("summarizeUsage", () => {
 
   it("returns null with no games", () => {
     expect(summarizeUsage([])).toBeNull();
+  });
+});
+
+describe("usageOrLastSeason", () => {
+  const game = (opportunityShare: number) => ({ opportunityShare, snapShare: 0, targetShare: 0, carryShare: 0, redZoneShare: 0 }) as UsageWeek;
+  const now = new Map([["a", [game(0.2)]]]);
+  const before = new Map([["a", [game(0.1)]], ["b", [game(0.3)]]]);
+
+  it("prefers this season", () => {
+    const { usage, fromLastSeason } = usageOrLastSeason("a", now, before);
+    expect(usage!.opportunityShare).toBe(0.2);
+    expect(fromLastSeason).toBe(false);
+  });
+
+  it("falls back to last season when he hasn't played", () => {
+    const { usage, fromLastSeason } = usageOrLastSeason("b", now, before);
+    expect(usage!.opportunityShare).toBe(0.3);
+    expect(fromLastSeason).toBe(true);
+  });
+
+  it("is null when he played in neither", () => {
+    expect(usageOrLastSeason("c", now, before)).toEqual({ usage: null, fromLastSeason: false });
   });
 });

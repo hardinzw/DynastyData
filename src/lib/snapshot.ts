@@ -1,4 +1,4 @@
-import type { CollegeMap, DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "../../shared/types.ts";
+import type { DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "../../shared/types.ts";
 import { buildBoard } from "./board.ts";
 import { DEFAULT_WEIGHTS, type SignalKey, type Weights } from "./breakout.ts";
 import { isCheap } from "./production.ts";
@@ -15,6 +15,8 @@ export interface SnapshotRow {
   /** 0-100, as the board shows it. */
   score: number;
   tier: string;
+  /** He hadn't played this season, so his usage signal is from last season. */
+  usageFromLastSeason: boolean;
   /** Each signal 0-1, or null if it had no data and was left out of the score. */
   signals: Record<SignalKey, number | null>;
   /** Whether FantasyCalc prices him as cheap, by league format. */
@@ -46,13 +48,12 @@ export interface SnapshotInput {
   weeks: WeekData[];
   priorWeeks: WeekData[];
   draft: DraftMap;
-  college: CollegeMap;
   values: Record<string, ValuesMap>;
 }
 
 /** Scores the same players the board does. Prices don't affect the score, only `cheap`. */
-export function buildSnapshot({ takenAt, commit, season, throughWeek, players, weeks, priorWeeks, draft, college, values }: SnapshotInput): Snapshot {
-  const board = buildBoard({ players, weeks, inSeason: true, priorWeeks, draft, college, values: {}, rosters: [], users: [], myUserId: null });
+export function buildSnapshot({ takenAt, commit, season, throughWeek, players, weeks, priorWeeks, draft, values }: SnapshotInput): Snapshot {
+  const board = buildBoard({ players, weeks, inSeason: true, priorWeeks, draft, college: {}, values: {}, rosters: [], users: [], myUserId: null });
   const rows = board.map((r): SnapshotRow => ({
     id: r.player.id,
     name: r.player.name,
@@ -61,6 +62,7 @@ export function buildSnapshot({ takenAt, commit, season, throughWeek, players, w
     age: r.player.age,
     score: r.score,
     tier: r.tier.label,
+    usageFromLastSeason: r.usageFromLastSeason,
     signals: Object.fromEntries(r.signals.map((s) => [s.key, s.missing ? null : Number(s.score.toFixed(3))])) as Record<SignalKey, number | null>,
     cheap: Object.fromEntries(
       Object.entries(values).map(([key, map]) => [key, isCheap(r.player.position, map[r.player.id]?.positionRank ?? null)]),

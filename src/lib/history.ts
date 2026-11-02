@@ -1,7 +1,8 @@
 import type { Position } from "../../shared/positions.ts";
-import type { DraftInfo } from "../../shared/types.ts";
+import type { CollegeMap, DraftInfo } from "../../shared/types.ts";
 import type { Fold, Sample } from "./backtest.ts";
-import { collegeStat, combine, DEFAULT_WEIGHTS, withinAgeCap, type CollegeStat, type SignalKey } from "./breakout.ts";
+import { combine, DEFAULT_WEIGHTS, withinAgeCap, type SignalKey } from "./breakout.ts";
+import { collegeStat, type CollegeStat } from "./college.ts";
 
 /**
  * One past breakout: a player who wasn't a starter and became one, with what the model
@@ -27,7 +28,10 @@ export interface HistoryRow {
   adp: number | null;
   overAgeCap: boolean;
   usage: { share: number; games: number } | null;
+  /** He hadn't played that season, so `usage` is from the season before. */
+  usageFromLastSeason: boolean;
   draft: DraftInfo | null;
+  /** Shown next to the player. Not part of the score. */
   college: CollegeStat | null;
   /** Names of teammates ahead of him who were gone at the cutoff. */
   openedBy: string[];
@@ -45,10 +49,10 @@ export interface History {
  * Every breakout in a fold. `samples` must be built with ignoreAgeCap so older breakouts
  * show up too; the cheap-board rank still only counts players the board would have shown.
  */
-export function historyRows(fold: Fold, samples: Sample[], names: (id: string) => string): HistoryRow[] {
+export function historyRows(fold: Fold, samples: Sample[], names: (id: string) => string, college: CollegeMap): HistoryRow[] {
   const scoreOf = (s: Sample) => Math.round(combine(s.signals, DEFAULT_WEIGHTS));
   const board = samples
-    .filter((s) => s.cheap && withinAgeCap(s.player))
+    .filter((s) => s.cheap && withinAgeCap(s.player) && !s.usageFromLastSeason)
     .sort((a, b) => scoreOf(b) - scoreOf(a));
   const rank = new Map(board.map((s, i) => [s.player.id, i + 1]));
   const season = fold.outcomeWeeks[0]!.season;
@@ -76,8 +80,9 @@ export function historyRows(fold: Fold, samples: Sample[], names: (id: string) =
       usage: s.input.usage
         ? { share: +s.input.usage.opportunityShare.toFixed(3), games: s.input.usage.games }
         : null,
+      usageFromLastSeason: s.usageFromLastSeason,
       draft: s.input.draft,
-      college: collegeStat(s.player, s.input.college),
+      college: collegeStat(s.player, college[s.player.id] ?? []),
       openedBy: s.opening.holders.map((h) => names(h.playerId)),
       outcome: { posRank: s.outcome!.posRank!, ppg: +s.outcome!.ppg.toFixed(1), games: s.outcome!.games },
     }));

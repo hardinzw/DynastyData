@@ -19,7 +19,8 @@ import {
   useValues,
 } from "../hooks/queries.ts";
 import { buildBoard, type BoardRow, type Ownership } from "../lib/board.ts";
-import { describeCollegeStat, MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
+import { MAX_BREAKOUT_AGE } from "../lib/breakout.ts";
+import { describeCollegeStat } from "../lib/college.ts";
 import { STARTER_RANK } from "../lib/production.ts";
 import { valuesParamsFor } from "../lib/scoring.ts";
 import { ScoreCell, TierLegend } from "../components/ScoreTier.tsx";
@@ -162,7 +163,7 @@ export default function Board() {
               <th className="px-3">Draft</th>
               <th
                 className="px-3"
-                title="RB: share of team receiving yards, final season. TE: target share, final season. WR: age at first season with 20% of team receiving yards."
+                title="Not part of the score. RB: share of team receiving yards, final season. TE: target share, final season. WR: age at first season with 20% of team receiving yards."
               >
                 College
               </th>
@@ -221,7 +222,7 @@ function BoardTableRow({
   players: PlayersMap;
   inSeason: boolean;
 }) {
-  const { player, usage, draft, college, value, score, tier, ownership, opening } = row;
+  const { player, usage, usageFromLastSeason, draft, college, value, score, tier, ownership, opening } = row;
   const openedBy = opening.holders.map((h) => players[h.playerId]?.name ?? h.playerId).join(", ");
   return (
     <tr className="border-b border-line align-middle last:border-b-0">
@@ -258,7 +259,9 @@ function BoardTableRow({
         {usage ? (
           <>
             <div>{Math.round(usage.opportunityShare * 100)}%</div>
-            <div className="text-xs text-muted">{usage.games} games</div>
+            <div className="text-xs text-muted">
+              {usage.games} games{usageFromLastSeason && " last season"}
+            </div>
           </>
         ) : (
           <Empty />
