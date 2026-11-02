@@ -53,6 +53,20 @@ describe("buildBoard", () => {
     expect(board.map((r) => r.player.id)).toEqual(["young"]);
   });
 
+  it("gives unplayed rookies a rookie tier without changing their score", () => {
+    const players = { rook: player("rook", "WR", 21), vet: player("vet", "WR", 21) };
+    const draft = {
+      rook: { season: 2026, round: 1, pick: 8, team: "KC" },
+      vet: { season: 2023, round: 1, pick: 8, team: "KC" },
+    };
+    const board = buildBoard(input({ players, draft, weeks: weeks(2026, 1, []) }));
+    const rook = board.find((r) => r.player.id === "rook")!;
+    const vet = board.find((r) => r.player.id === "vet")!;
+    expect(rook).toMatchObject({ rookie: true, tier: { label: "Rookie prospect" } });
+    expect(vet).toMatchObject({ rookie: false, tier: { label: "Strong" } });
+    expect(rook.score).toBe(vet.score);
+  });
+
   it("leaves out players who were starters this season or last", () => {
     const players = { now: player("now", "WR", 23), last: player("last", "WR", 23), new: player("new", "WR", 23) };
     // With only three WRs, every qualified WR ranks inside WR24.

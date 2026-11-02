@@ -1,7 +1,7 @@
 import { ENABLED_POSITIONS } from "../../shared/positions.ts";
 import type { CollegeMap, DraftMap, DynastyValue, PlayersMap, ValuesMap, WeekData } from "../../shared/types.ts";
 import type { LeagueUser, Roster } from "../api/sleeper.ts";
-import { rankBreakouts, withinAgeCap, type BreakoutResult } from "./breakout.ts";
+import { isUnplayedRookie, rankBreakouts, rookieTier, scoreTier, withinAgeCap, type BoardTier, type BreakoutResult } from "./breakout.ts";
 import { currentlyOut, openingFor, roleHolders, type Opening, type RoleHolder } from "./opening.ts";
 import { isCheap, isStarter, production } from "./production.ts";
 import { buildUsage, summarizeUsage } from "./usage.ts";
@@ -12,6 +12,9 @@ export type Ownership =
   | { kind: "rival"; ownerName: string };
 
 export interface BoardRow extends BreakoutResult {
+  /** A rookie who hasn't played. His tier comes from ROOKIE_TIERS; the score is unchanged. */
+  rookie: boolean;
+  tier: BoardTier;
   value: DynastyValue | null;
   /** FantasyCalc ranks him outside starter range at his position; see isCheap. */
   cheap: boolean;
@@ -89,8 +92,13 @@ export function buildBoard({
       draft: draft[player.id] ?? null,
       college: college[player.id] ?? [],
     }));
+  const scoredSeason = weeks[0]?.season;
+  const rookieRow = (r: BreakoutResult) =>
+    scoredSeason != null && isUnplayedRookie(r.player, r.draft, r.usage, scoredSeason);
   return rankBreakouts(inputs).map((r) => ({
     ...r,
+    rookie: rookieRow(r),
+    tier: rookieRow(r) ? rookieTier(r.score) : scoreTier(r.score),
     opening: openingFor(
       { id: r.player.id, team: r.player.team, position: r.player.position, share: r.usage?.opportunityShare ?? 0 },
       holders,

@@ -4,7 +4,9 @@ import {
   collegeStat,
   DEFAULT_WEIGHTS,
   describeCollegeStat,
+  isUnplayedRookie,
   rankBreakouts,
+  rookieTier,
   scoreTier,
   withinAgeCap,
   type BreakoutInput,
@@ -117,6 +119,43 @@ describe("scoreTier", () => {
     expect(scoreTier(74).label).toBe("Watch");
     expect(scoreTier(40).label).toBe("Long shot");
     expect(scoreTier(39).label).toBe("Unlikely");
+  });
+});
+
+describe("rookieTier", () => {
+  it("splits rookies at 60", () => {
+    expect(rookieTier(96).label).toBe("Rookie prospect");
+    expect(rookieTier(60).label).toBe("Rookie prospect");
+    expect(rookieTier(59).label).toBe("Rookie long shot");
+  });
+});
+
+describe("isUnplayedRookie", () => {
+  const usage = { games: 3 } as UsageAverages;
+  const drafted = (season: number) => ({ season, round: 1, pick: 8, team: "NO" });
+
+  it("is true for a player drafted this season with no games", () => {
+    expect(isUnplayedRookie(player("wr", 21), drafted(2026), null, 2026)).toBe(true);
+  });
+
+  it("is true in the offseason for a player drafted after the season being scored", () => {
+    expect(isUnplayedRookie(player("wr", 21), drafted(2027), null, 2026)).toBe(true);
+  });
+
+  it("is false once he has played", () => {
+    expect(isUnplayedRookie(player("wr", 21), drafted(2026), usage, 2026)).toBe(false);
+  });
+
+  it("is false for a veteran with no games", () => {
+    expect(isUnplayedRookie(player("wr", 24), drafted(2023), null, 2026)).toBe(false);
+  });
+
+  it("uses his rookie year when he went undrafted", () => {
+    expect(isUnplayedRookie({ ...player("wr", 22), rookieYear: 2026 }, null, null, 2026)).toBe(true);
+  });
+
+  it("is false when nothing says when he started", () => {
+    expect(isUnplayedRookie(player("wr", 22), null, null, 2026)).toBe(false);
   });
 });
 

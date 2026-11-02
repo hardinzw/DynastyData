@@ -72,6 +72,14 @@ describe("buildSnapshot", () => {
     expect(row!.signals.draftCapital).toBe(0.05);
   });
 
+  it("records the tier the board shows", () => {
+    const players = { rook: player("rook", "WR", 21) };
+    const draft = { rook: { season: 2026, round: 1, pick: 8, team: "KC" } };
+    const weeks = [{ season: 2026, week: 1, final: true, lines: [] }];
+    const [row] = buildSnapshot(input({ players, draft, weeks })).rows;
+    expect(row!.tier).toBe("Rookie prospect");
+  });
+
   it("keeps prices for players who aren't on the board", () => {
     const values = { oneQb: { star: priced(1) } };
     expect(buildSnapshot(input({ values })).values).toEqual(values);

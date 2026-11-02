@@ -41,6 +41,36 @@ export function scoreTier(score: number): ScoreTier {
 }
 
 /**
+ * Tiers for rookies who haven't played. SCORE_TIERS' odds don't fit them: they rarely break
+ * out in year one, but high scorers often do later. Backtest, cheap rookies: year one from the
+ * 2022-25 classes (6 of 74 at 60+, 3 of 177 under), within three years from the 2022-23
+ * classes (18 of 44, 6 of 82). Above 60, Strong and Watch rookies did about the same.
+ */
+export const ROOKIE_TIERS = [
+  { min: 60, label: "Rookie prospect", odds: "about 1 in 12 broke out in year one, about 4 in 10 within three years" },
+  { min: 0, label: "Rookie long shot", odds: "about 1 in 60 broke out in year one, about 1 in 14 within three years" },
+] as const;
+
+export type RookieTier = (typeof ROOKIE_TIERS)[number];
+export type BoardTier = ScoreTier | RookieTier;
+
+export function rookieTier(score: number): RookieTier {
+  return ROOKIE_TIERS.find((t) => score >= t.min)!;
+}
+
+/** A rookie with no games in the season being scored, including one drafted after it. */
+export function isUnplayedRookie(
+  player: PlayerInfo,
+  draft: DraftInfo | null,
+  usage: UsageAverages | null,
+  scoredSeason: number,
+): boolean {
+  if (usage) return false;
+  const firstSeason = draft?.season ?? player.rookieYear;
+  return firstSeason != null && firstSeason >= scoredSeason;
+}
+
+/**
  * Oldest age that still counts as a dynasty breakout. Older players are left off the board
  * entirely rather than scored down, so the tuned weights only rank players worth buying.
  * QB is a placeholder until QB is enabled.

@@ -90,6 +90,15 @@ Breakout rates by score among cheap players in the backtest (2021-2025, both tes
 
 About 2% of cheap players break out overall, so a Strong score is roughly 10 times the base rate. The score ranks players; it isn't a probability. These rates are measured on the same seasons the weights were tuned on, so they're slightly optimistic. The tiers are in `SCORE_TIERS`.
 
+Rookies who haven't played get their own labels, because they break out on a different timeline. Their scores are unchanged:
+
+| Score | Label | Broke out in year one (2022-25 classes) | Within three years (2022-23 classes) |
+|---|---|---|---|
+| 60+ | Rookie prospect | 6 of 74 (about 1 in 12) | 18 of 44 (about 4 in 10) |
+| Under 60 | Rookie long shot | 3 of 177 (about 1 in 60) | 6 of 82 (about 1 in 14) |
+
+Veterans with no games this season have no such label yet. Their usage is left out of the score too, which the backtest doesn't cover, so an injured veteran's score can run high.
+
 ## Breakout history
 
 The Breakout history page (`/history`) lists every RB, WR and TE who wasn't a starter and became one, with the score today's model gives him from what was known at the time: either the offseason before, or after week 8 of that season. It includes expensive players and players over the age cap, and the current season so far.

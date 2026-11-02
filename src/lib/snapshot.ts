@@ -1,6 +1,6 @@
 import type { CollegeMap, DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "../../shared/types.ts";
 import { buildBoard } from "./board.ts";
-import { DEFAULT_WEIGHTS, scoreTier, type SignalKey, type Weights } from "./breakout.ts";
+import { DEFAULT_WEIGHTS, type SignalKey, type Weights } from "./breakout.ts";
 import { isCheap } from "./production.ts";
 
 /** Key for one league format's values in a snapshot, e.g. "1qb-12-1ppr". */
@@ -60,7 +60,7 @@ export function buildSnapshot({ takenAt, commit, season, throughWeek, players, w
     team: r.player.team,
     age: r.player.age,
     score: r.score,
-    tier: scoreTier(r.score).label,
+    tier: r.tier.label,
     signals: Object.fromEntries(r.signals.map((s) => [s.key, s.missing ? null : Number(s.score.toFixed(3))])) as Record<SignalKey, number | null>,
     cheap: Object.fromEntries(
       Object.entries(values).map(([key, map]) => [key, isCheap(r.player.position, map[r.player.id]?.positionRank ?? null)]),

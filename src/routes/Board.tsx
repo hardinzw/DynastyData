@@ -28,6 +28,7 @@ const ROWS_SHOWN = 100;
 
 type OwnershipFilter = "all" | Ownership["kind"];
 type PriceFilter = "cheap" | "all";
+type RookieFilter = "include" | "hide" | "only";
 
 export default function Board() {
   const { leagueId = "" } = useParams();
@@ -37,6 +38,7 @@ export default function Board() {
   const [price, setPrice] = useState<PriceFilter>("cheap");
   const [position, setPosition] = useState<Position | "ALL">("ALL");
   const [ownership, setOwnership] = useState<OwnershipFilter>("all");
+  const [rookies, setRookies] = useState<RookieFilter>("include");
 
   const state = useNflState();
   const navigate = useNavigate();
@@ -100,6 +102,7 @@ export default function Board() {
     .filter((r) => price === "all" || r.cheap)
     .filter((r) => position === "ALL" || r.player.position === position)
     .filter((r) => ownership === "all" || r.ownership.kind === ownership)
+    .filter((r) => rookies === "include" || r.rookie === (rookies === "only"))
     .slice(0, ROWS_SHOWN);
 
   return (
@@ -137,9 +140,14 @@ export default function Board() {
             <option value="rival">On rival rosters</option>
             {myUserId && <option value="mine">My roster</option>}
           </select>
+          <select value={rookies} onChange={(e) => setRookies(e.target.value as RookieFilter)} className={selectClass}>
+            <option value="include">Unplayed rookies included</option>
+            <option value="hide">Hide unplayed rookies</option>
+            <option value="only">Unplayed rookies only</option>
+          </select>
         </div>
       </div>
-      <TierLegend />
+      <TierLegend rookies />
       <div className="overflow-x-auto rounded-lg border border-line bg-card">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
@@ -213,7 +221,7 @@ function BoardTableRow({
   players: PlayersMap;
   inSeason: boolean;
 }) {
-  const { player, usage, draft, college, value, score, ownership, opening } = row;
+  const { player, usage, draft, college, value, score, tier, ownership, opening } = row;
   const openedBy = opening.holders.map((h) => players[h.playerId]?.name ?? h.playerId).join(", ");
   return (
     <tr className="border-b border-line align-middle last:border-b-0">
@@ -245,7 +253,7 @@ function BoardTableRow({
           </div>
         </div>
       </td>
-      <ScoreCell score={score} />
+      <ScoreCell score={score} tier={tier} />
       <td className="px-3 font-mono tabular-nums">
         {usage ? (
           <>
