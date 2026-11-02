@@ -15,6 +15,7 @@ npm run dev        # app and Worker together on a local server
 npm test           # Vitest
 npm run typecheck
 npm run history    # rebuild public/data/breakout-history.json (see Breakout history)
+npm run snapshot   # save this week's scores and dynasty prices (see Snapshots)
 npm run deploy     # build and deploy to Cloudflare (creates the KV namespace on first deploy)
 npm run cf-typegen # regenerate worker-configuration.d.ts after editing wrangler.jsonc
 ```
@@ -31,6 +32,7 @@ src/
   lib/           pure logic: scoring, usage shares, breakout score, board assembly, history
   routes/        Home, Leagues, Board, History
 public/data/     breakout-history.json, built by npm run history
+data/snapshots/  weekly scores and prices, built by npm run snapshot
 ```
 
 ## Worker API
@@ -99,6 +101,19 @@ npm run history   # writes public/data/breakout-history.json
 ```
 
 Rerun it during the season to update the current season's breakouts, after each season, and after any model change, then deploy.
+
+## Snapshots
+
+The backtest can only compare the model with redraft ADP, because FantasyCalc has no price history and the board's dynasty prices aren't saved anywhere. Snapshots build that history, and give the model a test on seasons it wasn't tuned on.
+
+```sh
+npm run snapshot               # writes data/snapshots/<season>-wk<week>.json
+npm run snapshot -- --dry-run  # prints the summary without writing anything
+```
+
+Run it once a week during the regular season, after Monday's game and before Thursday's, then commit the file. It covers the weeks before Sleeper's current week, so it can't pick up a week in progress. Sleeper's week doesn't change the moment Monday's game ends, so check that the output says the week you expect.
+
+Each file holds every board player's score, tier and signals, plus every FantasyCalc price in 12-team PPR for 1QB and superflex. Existing files are never overwritten, so the commit date shows the scores came before the results.
 
 ## Backtest
 

@@ -12,6 +12,7 @@
     "typecheck": "tsc -b",
     "backtest": "node scripts/backtest.ts",
     "history": "node scripts/history.ts",
+    "snapshot": "node scripts/snapshot.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

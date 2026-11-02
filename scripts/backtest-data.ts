@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CollegeMap, DraftMap, PlayersMap, WeekData } from "../shared/types.ts";
 import type { Fold } from "../src/lib/backtest.ts";
-import { buildCollegeMap, fetchCollegeSeason } from "../worker/sources/college.ts";
+import { buildCollegeMap, fetchCollegeSeason, type CollegeRow } from "../worker/sources/college.ts";
 import { fetchDraft } from "../worker/sources/nflverse.ts";
 import { fetchPlayers, fetchState, fetchWeek } from "../worker/sources/sleeper.ts";
 
@@ -28,7 +28,7 @@ async function cached<T>(name: string, load: () => Promise<T>): Promise<T> {
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
-function loadWeeks(season: number, from: number, to: number): Promise<WeekData[]> {
+export function loadWeeks(season: number, from: number, to: number): Promise<WeekData[]> {
   return Promise.all(range(from, to).map((w) => cached(`week-${season}-${w}`, () => fetchWeek(season, w, true))));
 }
 
@@ -86,13 +86,16 @@ async function nextSeasonFold(season: number): Promise<Fold> {
 const FIRST_COLLEGE_SEASON = 2012;
 const LAST_COLLEGE_SEASON = 2025;
 
+export function loadCollegeSeasons(): Promise<CollegeRow[][]> {
+  return Promise.all(
+    range(FIRST_COLLEGE_SEASON, LAST_COLLEGE_SEASON).map((s) => cached(`college-${s}`, () => fetchCollegeSeason(s))),
+  );
+}
+
 export async function loadPlayersAndDraft(): Promise<{ players: PlayersMap; draft: DraftMap; college: CollegeMap }> {
   const players = await cached("players-all-v2", () => fetchPlayers({ includeFormer: true }));
   const draft = await cached("draft", () => fetchDraft(players));
-  const seasons = await Promise.all(
-    range(FIRST_COLLEGE_SEASON, LAST_COLLEGE_SEASON).map((s) => cached(`college-${s}`, () => fetchCollegeSeason(s))),
-  );
-  return { players, draft, college: buildCollegeMap(players, seasons) };
+  return { players, draft, college: buildCollegeMap(players, await loadCollegeSeasons()) };
 }
 
 /** Score after week 8, breakout = starter in weeks 9-18. */
