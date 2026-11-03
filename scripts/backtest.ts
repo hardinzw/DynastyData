@@ -1,6 +1,7 @@
 // Backtests the breakout score against past seasons.
 //
-//   npm run backtest                  # both modes
+//   npm run backtest                  # every mode
+//   npm run backtest -- long-term     # score in the offseason, check the next 2 and 3 seasons
 //   npm run backtest -- in-season     # score after week 8, check weeks 9-18
 //   npm run backtest -- next-season   # score after the season, check the next season
 //
@@ -13,17 +14,22 @@ import {
   evaluate,
   evaluateScores,
   signalAucs,
+  topLongTerm,
   topResult,
   tuneWeights,
   weightGrid,
+  withLongTerm,
   type Evaluation,
   type Fold,
+  type LongTermSample,
+  type LongTermTop,
   type Sample,
 } from "../src/lib/backtest.ts";
 import { IMPACT_PPG, REPLACEMENT_PPG } from "../src/lib/production.ts";
 import { ENABLED_POSITIONS, type Position } from "../shared/positions.ts";
-import { inSeasonFolds, loadPlayersAndDraft, nextSeasonFolds } from "./backtest-data.ts";
+import { inSeasonFolds, loadPlayersAndDraft, longTermFolds, nextSeasonFolds } from "./backtest-data.ts";
 
+const LONG_TERM_HORIZONS = [3, 2];
 const f2 = (n: number) => (Number.isNaN(n) ? "  —  " : n.toFixed(3));
 const pctStr = (n: number) => `${Math.round(n * 100)}%`.padStart(4);
 
@@ -131,6 +137,69 @@ function runMode(name: string, folds: Fold[], players: PlayersMap, draft: DraftM
   printTop(folds.at(-1)!.label, cheap.at(-1)!, best.weights);
 }
 
+/** A rookie's usage is missing, not low, so a signal test across both groups mostly finds rookies. */
+const isRookie = (s: Sample) => !s.input.usage;
+
+function longTermRow(label: string, pool: LongTermSample[][], score: (s: Sample) => number) {
+  const aucs = pool.map((s) => evaluateScores(s.map(score), s.map((x) => x.brokeOut)).auc).filter((a) => !Number.isNaN(a));
+  const tops = pool.map((s) => topLongTerm(s, score));
+  const total = (f: (t: LongTermTop) => number) => tops.reduce((sum, t) => sum + f(t), 0);
+  console.log(
+    `  ${label.padEnd(18)} AUC ${f2(mean(aucs))}  credit ${mean(tops.map((t) => t.credit)).toFixed(2)} [${tops.map((t) => t.credit.toFixed(2)).join(" ")}]  starters ${total((t) => t.starters)}  Impact ${total((t) => t.impact)}`,
+  );
+}
+
+function longTermPool(label: string, pool: LongTermSample[][], methods: [string, (s: Sample) => number][]) {
+  const flat = pool.flat();
+  console.log(`\n${label}: ${flat.length} players, ${flat.filter((s) => s.brokeOut).length} became starters`);
+  for (const [name, score] of methods) longTermRow(name, pool, score);
+}
+
+/**
+ * The dynasty test: offseason scores against the next few seasons together. Windows overlap,
+ * so tests aren't independent. Cutoffs before 2022 have no ADP, so they can't say who was cheap.
+ */
+async function runLongTerm(horizon: number, players: PlayersMap, draft: DraftMap) {
+  const folds = await longTermFolds(horizon);
+  const cutoffs = folds.map((f) => f.fold.cutoffDate.slice(0, 4));
+  console.log(`\n=== Long term: ${horizon} season${horizon > 1 ? "s" : ""}, cutoffs ${cutoffs.join(" ")} ===`);
+  console.log("Top 20 per test. Credit = average total over the window. AUC = starter in any season.");
+
+  const pools = folds.map((f) =>
+    withLongTerm(buildSamples(f.fold, players, draft).filter((s) => !s.usageFromLastSeason), f.seasons),
+  );
+  const signal = (key: SignalKey) => (s: Sample) => s.signals.find((x) => x.key === key)!.score;
+  const model: [string, (s: Sample) => number] = ["Model", (s) => combine(s.signals, DEFAULT_WEIGHTS)];
+  const usage: [string, (s: Sample) => number] = ["Usage alone", signal("usageLevel")];
+  const pick: [string, (s: Sample) => number] = ["Draft pick alone", signal("draftCapital")];
+  const adp: [string, (s: Sample) => number] = ["ADP alone", marketScore];
+  const only = (list: LongTermSample[][], keep: (s: Sample) => boolean) => list.map((s) => s.filter(keep));
+
+  longTermPool("Everyone not yet a starter", pools, [model, pick]);
+  longTermPool("Veterans", only(pools, (s) => !isRookie(s)), [model, usage, pick]);
+  longTermPool("Rookies", only(pools, isRookie), [pick]);
+
+  const priced = pools.filter((_, i) => folds[i]!.hasAdp);
+  const cheap = only(priced, (s) => s.cheap);
+  longTermPool("Cheap players, 2022 cutoffs on", cheap, [model, pick, adp]);
+  longTermPool("Cheap veterans", only(cheap, (s) => !isRookie(s)), [model, usage, pick, adp]);
+  longTermPool("Cheap rookies", only(cheap, isRookie), [pick, adp]);
+
+  // Leave one cutoff out: tune on the others, report on the held-out one.
+  const grid = weightGrid(Object.keys(DEFAULT_WEIGHTS) as SignalKey[], 0.1);
+  console.log("\nTuned on the other cutoffs, everyone not yet a starter:");
+  const heldOut = pools.map((s, i) => {
+    const { weights } = tuneWeights(pools.filter((_, j) => j !== i), grid);
+    const score = (x: Sample) => combine(x.signals, weights);
+    const result = { auc: evaluate(s, weights).auc, credit: topLongTerm(s, score).credit };
+    console.log(`  ${cutoffs[i]}  ${formatWeights(weights).padEnd(32)} AUC ${f2(result.auc)}  credit ${result.credit.toFixed(2)}`);
+    return result;
+  });
+  console.log(`  Held out mean: AUC ${f2(mean(heldOut.map((r) => r.auc)))}  credit ${mean(heldOut.map((r) => r.credit)).toFixed(2)}`);
+  const best = tuneWeights(pools, grid);
+  console.log(`  Best on all cutoffs: ${formatWeights(best.weights)} (mean AUC ${f2(best.meanAuc)})`);
+}
+
 function printTop(label: string, samples: Sample[], weights: Weights) {
   console.log(`\nTop 15 cheap players for ${label} with those weights (✓ = broke out):`);
   const scored = samples
@@ -151,6 +220,9 @@ async function main() {
   console.log("Loading data (cached after the first run)…");
   const { players, draft } = await loadPlayersAndDraft();
 
+  if (!mode || mode === "long-term") {
+    for (const horizon of LONG_TERM_HORIZONS) await runLongTerm(horizon, players, draft);
+  }
   if (!mode || mode === "in-season") {
     runMode("In-season: score after week 8, breakout = starter in weeks 9-18", await inSeasonFolds(), players, draft);
   }

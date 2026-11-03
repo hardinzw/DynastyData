@@ -79,6 +79,15 @@ describe("buildSnapshot", () => {
     expect(row!.tier).toBe("Rookie prospect");
   });
 
+  it("records the projection the board shows", () => {
+    const players = { rook: player("rook", "WR", 21), gone: player("gone", "WR", 24) };
+    const draft = { rook: { season: 2026, round: 1, pick: 8, team: "KC" } };
+    const weeks = [{ season: 2026, week: 1, final: true, lines: [] }];
+    const { rows } = buildSnapshot(input({ players, draft, weeks }));
+    expect(rows.find((r) => r.id === "rook")!.projection!.ppg).toBeGreaterThan(0);
+    expect(rows.find((r) => r.id === "gone")!.projection).toBeNull();
+  });
+
   it("marks usage carried over from last season", () => {
     const players = { hurt: player("hurt", "WR", 24) };
     const line = { playerId: "hurt", position: "WR" as const, team: "KC", opponent: null, stats: { off_snp: 30, rec_tgt: 2 } };

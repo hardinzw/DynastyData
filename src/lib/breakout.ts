@@ -14,6 +14,10 @@ export type Weights = Record<SignalKey, number>;
  * usage rank above market-price rank both scored near chance. Opportunity opened by an
  * injured or departed teammate scored below chance, so it's shown on the board but not
  * scored; see opening.ts. Youth and college barely moved AUC or the top 20, so they're out.
+ *
+ * Also the best long-term weights we can defend (npm run backtest -- long-term): tuning on
+ * two- and three-season results moved usage only to 0.5-0.6, and no blend with youth or college
+ * improved the top 20 by more than noise over 2018-2024 cutoffs.
  */
 export const DEFAULT_WEIGHTS: Weights = {
   usageLevel: 0.6,

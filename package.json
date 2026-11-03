@@ -13,6 +13,7 @@
     "backtest": "node scripts/backtest.ts",
     "history": "node scripts/history.ts",
     "snapshot": "node scripts/snapshot.ts",
+    "projection": "node scripts/projection.ts",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

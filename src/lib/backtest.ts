@@ -241,6 +241,54 @@ export function topResult(samples: Sample[], score: (s: Sample) => number, k = 2
   };
 }
 
+/** How a player did across several seasons after the cutoff. */
+export interface LongTermOutcome {
+  /** gradedCredit added up across the seasons. */
+  credit: number;
+  /** Starter in at least one season. */
+  starter: boolean;
+  /** Impact in at least one season. */
+  impact: boolean;
+}
+
+export function longTermOutcome(id: string, seasons: Map<string, Production>[]): LongTermOutcome {
+  const results = seasons.map((season) => season.get(id));
+  return {
+    credit: results.reduce((sum, p) => sum + gradedCredit(p), 0),
+    starter: results.some(isStarter),
+    impact: results.some(isImpact),
+  };
+}
+
+export interface LongTermSample extends Sample {
+  longTerm: LongTermOutcome;
+}
+
+/** Judges samples over several seasons. `brokeOut` becomes "starter in any of them", so tuning follows. */
+export function withLongTerm(samples: Sample[], seasons: Map<string, Production>[]): LongTermSample[] {
+  return samples.map((s) => {
+    const longTerm = longTermOutcome(s.player.id, seasons);
+    return { ...s, longTerm, brokeOut: longTerm.starter };
+  });
+}
+
+export interface LongTermTop {
+  /** Average total credit across the top players. */
+  credit: number;
+  starters: number;
+  impact: number;
+}
+
+/** How the top `k` by `score` finished over the whole window. */
+export function topLongTerm(samples: LongTermSample[], score: (s: Sample) => number, k = 20): LongTermTop {
+  const top = [...samples].sort((a, b) => score(b) - score(a)).slice(0, k);
+  return {
+    credit: top.reduce((sum, s) => sum + s.longTerm.credit, 0) / top.length,
+    starters: top.filter((s) => s.longTerm.starter).length,
+    impact: top.filter((s) => s.longTerm.impact).length,
+  };
+}
+
 export interface Evaluation {
   samples: number;
   breakouts: number;

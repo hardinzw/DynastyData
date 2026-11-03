@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { WeekData, WeeklyLine } from "../../shared/types.ts";
-import { auc, buildSamples, precisionAtK, topResult, weightGrid, type Fold, type Sample } from "./backtest.ts";
+import {
+  auc,
+  buildSamples,
+  longTermOutcome,
+  precisionAtK,
+  topLongTerm,
+  topResult,
+  weightGrid,
+  withLongTerm,
+  type Fold,
+  type Sample,
+} from "./backtest.ts";
 import { gradedCredit, isCheap, isImpact, isStarter, production, type Production } from "./production.ts";
 
 describe("auc", () => {
@@ -25,6 +36,37 @@ describe("auc", () => {
 describe("precisionAtK", () => {
   it("is the share of the top k that are positive", () => {
     expect(precisionAtK([5, 4, 3, 2, 1], [true, false, true, false, false], 2)).toBe(0.5);
+  });
+});
+
+describe("long-term outcomes", () => {
+  const finish = (ppg: number, posRank: number | null): Production => ({ position: "WR", games: 10, ppg, posRank });
+  const seasons = [
+    new Map([["a", finish(12, 40)], ["b", finish(9, 60)]]),
+    new Map([["a", finish(16, 10)], ["b", finish(30, null)]]),
+  ];
+  const sample = (id: string) => ({ player: { id }, brokeOut: false }) as Sample;
+
+  it("adds credit across seasons and counts a rung reached in any of them", () => {
+    // WR replacement is 11: 1 point in the first season, 5 in the second.
+    expect(longTermOutcome("a", seasons)).toEqual({ credit: 6, starter: true, impact: true });
+  });
+
+  it("gives nothing for a season he was too hurt to rank in, or a player who never appears", () => {
+    expect(longTermOutcome("b", seasons)).toEqual({ credit: 0, starter: false, impact: false });
+    expect(longTermOutcome("gone", seasons)).toEqual({ credit: 0, starter: false, impact: false });
+  });
+
+  it("judges a sample on the whole window", () => {
+    const [a, b] = withLongTerm([sample("a"), sample("b")], seasons);
+    expect(a!.brokeOut).toBe(true);
+    expect(b!.brokeOut).toBe(false);
+  });
+
+  it("reports how the top players finished", () => {
+    const samples = withLongTerm([sample("a"), sample("b")], seasons);
+    expect(topLongTerm(samples, (s) => (s.player.id === "a" ? 1 : 0), 1)).toEqual({ credit: 6, starters: 1, impact: 1 });
+    expect(topLongTerm(samples, () => 0)).toEqual({ credit: 3, starters: 1, impact: 1 });
   });
 });
 

@@ -2,6 +2,9 @@ import type { DraftMap, PlayersMap, ValuesMap, ValuesParams, WeekData } from "..
 import { buildBoard } from "./board.ts";
 import { DEFAULT_WEIGHTS, type SignalKey, type Weights } from "./breakout.ts";
 import { isCheap } from "./production.ts";
+import type { Projection } from "./projection.ts";
+
+const round = (n: number, digits: number) => Number(n.toFixed(digits));
 
 /** Key for one league format's values in a snapshot, e.g. "1qb-12-1ppr". */
 export const formatKey = ({ numQbs, numTeams, ppr }: ValuesParams) => `${numQbs}qb-${numTeams}-${ppr}ppr`;
@@ -19,6 +22,8 @@ export interface SnapshotRow {
   usageFromLastSeason: boolean;
   /** Each signal 0-1, or null if it had no data and was left out of the score. */
   signals: Record<SignalKey, number | null>;
+  /** The board's PPG projection, or null if it shows none. */
+  projection: Projection | null;
   /** Whether FantasyCalc prices him as cheap, by league format. */
   cheap: Record<string, boolean>;
 }
@@ -64,6 +69,12 @@ export function buildSnapshot({ takenAt, commit, season, throughWeek, players, w
     tier: r.tier.label,
     usageFromLastSeason: r.usageFromLastSeason,
     signals: Object.fromEntries(r.signals.map((s) => [s.key, s.missing ? null : Number(s.score.toFixed(3))])) as Record<SignalKey, number | null>,
+    projection: r.projection && {
+      ppg: round(r.projection.ppg, 2),
+      low: round(r.projection.low, 2),
+      high: round(r.projection.high, 2),
+      chancePlays: round(r.projection.chancePlays, 3),
+    },
     cheap: Object.fromEntries(
       Object.entries(values).map(([key, map]) => [key, isCheap(r.player.position, map[r.player.id]?.positionRank ?? null)]),
     ),

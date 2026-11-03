@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CollegeMap, DraftMap, PlayersMap, WeekData } from "../shared/types.ts";
 import type { Fold } from "../src/lib/backtest.ts";
+import { production, type Production } from "../src/lib/production.ts";
 import { buildCollegeMap, fetchCollegeSeason } from "../worker/sources/college.ts";
 import { fetchDraft } from "../worker/sources/nflverse.ts";
 import { fetchPlayers, fetchState, fetchWeek } from "../worker/sources/sleeper.ts";
@@ -16,6 +17,9 @@ const IN_SEASON_SEASONS = [2022, 2023, 2024, 2025];
 const NEXT_SEASON_SEASONS = [2021, 2022, 2023, 2024];
 const LAST_WEEK = 18;
 const IN_SEASON_CUTOFF_WEEK = 8;
+// Sleeper's stats start in 2016, which is the prior season for a 2018 cutoff.
+const FIRST_LONG_TERM_CUTOFF = 2018;
+const LAST_FINISHED_SEASON = 2025;
 
 async function cached<T>(name: string, load: () => Promise<T>): Promise<T> {
   const file = join(CACHE_DIR, `${name}.json`);
@@ -111,6 +115,27 @@ export async function inSeasonFolds(): Promise<Fold[]> {
 export async function nextSeasonFolds(): Promise<Fold[]> {
   const folds = [];
   for (const s of NEXT_SEASON_SEASONS) folds.push(await nextSeasonFold(s));
+  return folds;
+}
+
+export interface LongTermFold {
+  fold: Fold;
+  /** Each season's production from the cutoff on. */
+  seasons: Map<string, Production>[];
+  /** False before 2022, when there's no ADP to say who was cheap. */
+  hasAdp: boolean;
+}
+
+/** Offseason scores judged over `horizon` seasons, for every cutoff with that many finished. */
+export async function longTermFolds(horizon: number): Promise<LongTermFold[]> {
+  const folds: LongTermFold[] = [];
+  for (let cutoff = FIRST_LONG_TERM_CUTOFF; cutoff + horizon - 1 <= LAST_FINISHED_SEASON; cutoff++) {
+    const fold = await nextSeasonFold(cutoff - 1);
+    const seasons = await Promise.all(
+      range(cutoff, cutoff + horizon - 1).map(async (s) => production(await loadWeeks(s, 1, LAST_WEEK), fold.minOutcomeGames)),
+    );
+    folds.push({ fold, seasons, hasAdp: Object.keys(fold.adp).length > 0 });
+  }
   return folds;
 }
 

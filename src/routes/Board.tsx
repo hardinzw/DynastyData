@@ -150,12 +150,18 @@ export default function Board() {
       </div>
       <TierLegend rookies />
       <div className="overflow-x-auto rounded-lg border border-line bg-card">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead>
             <tr className="border-b border-line text-[11px] font-semibold tracking-wider text-muted uppercase">
               <th className="px-3 py-2.5">#</th>
               <th className="px-3">Player</th>
               <th className="px-3">Score</th>
+              <th
+                className="px-3"
+                title="Not part of the score. Expected PPG over the next three seasons, in seasons he plays 8+ games, with the middle 80% of how similar players did and the chance a season reaches 8 games. From past PPG and draft pick, tested on offseason scores, so it's less tested mid-season. Cheap veterans came in about 1 PPG under it."
+              >
+                Proj. PPG
+              </th>
               <th className="px-3" title="Average share of the team's targets, carries and air yards, weighted by position">
                 Opp. share
               </th>
@@ -222,7 +228,7 @@ function BoardTableRow({
   players: PlayersMap;
   inSeason: boolean;
 }) {
-  const { player, usage, usageFromLastSeason, draft, college, value, score, tier, ownership, opening } = row;
+  const { player, usage, usageFromLastSeason, draft, college, value, score, tier, projection, ownership, opening } = row;
   const openedBy = opening.holders.map((h) => players[h.playerId]?.name ?? h.playerId).join(", ");
   return (
     <tr className="border-b border-line align-middle last:border-b-0">
@@ -255,6 +261,18 @@ function BoardTableRow({
         </div>
       </td>
       <ScoreCell score={score} tier={tier} />
+      <td className="px-3 font-mono whitespace-nowrap tabular-nums">
+        {projection ? (
+          <>
+            <div>{projection.ppg.toFixed(1)}</div>
+            <div className="text-xs text-muted">
+              {projection.low.toFixed(0)}–{projection.high.toFixed(0)} · {Math.round(projection.chancePlays * 100)}% play
+            </div>
+          </>
+        ) : (
+          <Empty />
+        )}
+      </td>
       <td className="px-3 font-mono tabular-nums">
         {usage ? (
           <>

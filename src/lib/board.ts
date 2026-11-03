@@ -5,6 +5,7 @@ import { isUnplayedRookie, MISSED_SEASON_TIER, NO_RECENT_GAMES_TIER, rankBreakou
 import { collegeStat, type CollegeStat } from "./college.ts";
 import { currentlyOut, openingFor, roleHolders, type Opening, type RoleHolder } from "./opening.ts";
 import { isCheap, isStarter, production } from "./production.ts";
+import { projectPpg, type Projection } from "./projection.ts";
 import { buildUsage, usageOrLastSeason } from "./usage.ts";
 
 export type Ownership =
@@ -18,6 +19,8 @@ export interface BoardRow extends BreakoutResult {
   /** He hasn't played this season, so `usage` is from last season. */
   usageFromLastSeason: boolean;
   tier: BoardTier;
+  /** Null without games this season, unless he's an unplayed rookie. Not part of the score. */
+  projection: Projection | null;
   /** Shown next to the player. Not part of the score. */
   college: CollegeStat | null;
   value: DynastyValue | null;
@@ -108,11 +111,20 @@ export function buildBoard({
   return rankBreakouts(inputs)
     .map((r) => {
       const { fromLastSeason } = usageOrLastSeason(r.player.id, usage, lastSeasonUsage);
+      const past = current.get(r.player.id);
       return {
         ...r,
         rookie: rookieRow(r),
         usageFromLastSeason: fromLastSeason,
         tier: tierOf(r, fromLastSeason),
+        projection:
+          past || rookieRow(r)
+            ? projectPpg({
+                position: r.player.position,
+                draftScore: r.signals.find((s) => s.key === "draftCapital")!.score,
+                past: past ? { ppg: past.ppg, games: past.games } : null,
+              })
+            : null,
         college: collegeStat(r.player, college[r.player.id] ?? []),
         opening: openingFor(
           {

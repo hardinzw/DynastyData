@@ -67,6 +67,30 @@ describe("buildBoard", () => {
     expect(rook.score).toBe(vet.score);
   });
 
+  it("projects PPG for players with games and unplayed rookies, but not for anyone else", () => {
+    const players = {
+      active: player("active", "WR", 24),
+      rook: player("rook", "WR", 21),
+      hurt: player("hurt", "WR", 24),
+      gone: player("gone", "WR", 24),
+    };
+    const draft = { rook: { season: 2026, round: 1, pick: 8, team: "KC" } };
+    const board = buildBoard(
+      input({
+        players,
+        draft,
+        // Enough better receivers that he isn't ranked as a starter and left off the board.
+        weeks: weeks(2026, 4, [line("active", 8), ...Array.from({ length: 24 }, (_, i) => line(`star${i}`, 20))]),
+        priorWeeks: weeks(2025, 1, [line("hurt", 8)]),
+      }),
+    );
+    const projection = (id: string) => board.find((r) => r.player.id === id)!.projection;
+    expect(projection("active")!.ppg).toBeGreaterThan(0);
+    expect(projection("rook")!.ppg).toBeGreaterThan(0);
+    expect(projection("hurt")).toBeNull();
+    expect(projection("gone")).toBeNull();
+  });
+
   it("scores a veteran who missed this season on last season's usage", () => {
     const players = { hurt: player("hurt", "WR", 24), other: player("other", "WR", 24) };
     const draft = { hurt: { season: 2023, round: 1, pick: 8, team: "KC" } };

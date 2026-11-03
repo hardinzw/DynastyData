@@ -110,6 +110,24 @@ npm run history   # writes public/data/breakout-history.json
 
 Rerun it during the season to update the current season's breakouts, after each season, and after any model change, then deploy.
 
+### PPG projection
+
+The board also shows projected PPG beside the score. It doesn't change the score or the order. It covers the next three seasons and separates two questions:
+
+- **PPG when he plays:** expected PPG in seasons with 8+ games, with the range most similar players landed in (the middle 80%).
+- **Chance he plays:** how often a season reaches 8 games.
+
+Veterans are projected from past PPG and draft pick, by position. Rookies who haven't played use draft pick alone. Usage added nothing once past PPG was known, and college and age didn't help. Players with no games this season get no projection, unless they're unplayed rookies.
+
+How far to trust it, on seasons held out of the fit (offseason cutoffs 2018-2023):
+
+- It explains about 25-33% of the differences in PPG, and typically misses by 2-3.6 PPG. Always guessing the average misses by 2.7-4.75. So the ranges are wide: about 10 PPG for RB and WR, 7 for TE.
+- The ranges covered 75-85% of cheap players' seasons.
+- Among cheap players in the 2022-23 cutoffs, veterans and WR rookies came in about 1 PPG under the projection, TE rookies were on it, and RB rookies came in about 1.4 over. That's too few tests to correct for.
+- It was fit on offseason scores, so a mid-season projection from a few games is less tested.
+
+Past PPG improved the number, but it didn't pick better cheap players, which is why the score still ranks the board. Run `npm run projection` to refit and check it. The numbers are in `src/lib/projection.ts`.
+
 ## Snapshots
 
 The backtest can only compare the model with redraft ADP, because FantasyCalc has no price history and the board's dynasty prices aren't saved anywhere. Snapshots build that history, and give the model a test on seasons it wasn't tuned on.
@@ -126,10 +144,13 @@ Each file holds every board player's score, tier and signals, plus every Fantasy
 ## Backtest
 
 ```sh
-npm run backtest                 # both modes
+npm run backtest                 # every mode
+npm run backtest -- long-term    # score in the offseason, check the next 2 and 3 seasons (2018 cutoffs on)
 npm run backtest -- in-season    # score after week 8, check weeks 9-18 (2022-2025)
 npm run backtest -- next-season  # score after a season, check the next one (2021→22 to 2024→25)
 ```
+
+- **Long-term** is the main test, since this is a dynasty app. Credit is added up across the seasons, and a breakout means being a starter in any of them. Results are split into veterans and rookies, because rookies have no usage yet: mixed together, they make usage look useless when it's the strongest veteran signal. Windows overlap, so the tests aren't independent. Cutoffs before 2022 have no ADP, so they can't say who was cheap and only count in the "not yet a starter" results.
 
 - **Breakout** means finishing as a starter by PPR points per game (RB24, WR24, TE12) in the outcome window.
 - **Graded credit** gives each player his PPG above replacement (RB 10, WR 11, TE 8), roughly where he stops being cheap at his position, and 0 below that or with too few games. The output averages it over each method's top 20, so it uses every result rather than only who crossed a line.
